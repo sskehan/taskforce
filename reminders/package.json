@@ -1,0 +1,9 @@
+{
+  "name": "taskforce-reminders",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "dependencies": {
+    "firebase-admin": "^12.7.0"
+  }
+}
