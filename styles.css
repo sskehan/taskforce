@@ -16,6 +16,9 @@ button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
 a{color:var(--terra-d)}
 .hd{font-family:var(--hd);font-weight:800}
+.brand{display:flex;align-items:center;gap:8px;padding:14px 4px 0}
+.brand svg{border-radius:9px}
+.brand .hd{font-size:18px;letter-spacing:-.01em}
 .wrap{max-width:560px;margin:0 auto;padding:0 14px calc(var(--nav-h) + 30px)}
 .top{display:flex;justify-content:space-between;align-items:flex-end;padding:18px 4px 12px;gap:10px}
 .top h1{margin:2px 0 0;font-family:var(--hd);font-weight:800;font-size:28px;line-height:1.05}

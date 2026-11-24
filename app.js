@@ -2,7 +2,7 @@ import * as L from './logic.js';
 import { createStore, DEMO } from './store.js';
 import { DEFAULT_CATEGORIES } from './seed.js';
 
-export const VERSION = '1.01';
+export const VERSION = '1.02';
 const store = createStore();
 const S = { me: null, jobs: [], history: [], settings: { categories: DEFAULT_CATEGORIES, defaultTime: '18:00' }, filter: 'all', search: null, loaded: false, sheet: null, pending: null, editing: null };
 const $app = document.getElementById('app');
@@ -111,7 +111,8 @@ function viewHome() {
   const itemCats = [...new Set(jobs.filter(isItem).map(j => j.category))];
   const dateTxt = new Intl.DateTimeFormat('en-AU', { weekday: 'long', day: 'numeric', month: 'long', timeZone: L.TZ }).format(new Date());
   return `<div class="wrap">
-  <div class="top"><div><div class="sub">${esc(dateTxt)}</div><h1>${greeting()}, ${esc(S.me.name)}</h1></div>${avatars()}</div>
+  <div class="brand">${shieldSvg(34)}<span class="hd">TaskForce</span></div>
+  <div class="top" style="padding-top:6px"><div><div class="sub">${esc(dateTxt)}</div><h1>${greeting()}, ${esc(S.me.name)}</h1></div>${avatars()}</div>
   ${DEMO ? `<div class="banner">Demo mode: data stays on this phone until Firebase is set up.</div>` : ''}
   <div class="hero" style="margin-top:10px">
     <svg class="deco" width="160" height="160" viewBox="0 0 160 160" aria-hidden="true"><circle cx="80" cy="80" r="70" fill="none" stroke="#C8553D" stroke-width="22"/></svg>
