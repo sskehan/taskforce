@@ -1,0 +1,16 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Only Shaun and Lyndsey can read or change anything.
+    // Replace the two emails below with the ones you signed up with.
+    function family() {
+      return request.auth != null && request.auth.token.email in [
+        'PASTE_SHAUN_EMAIL',
+        'PASTE_LYNDSEY_EMAIL'
+      ];
+    }
+    match /{document=**} {
+      allow read, write: if family();
+    }
+  }
+}
