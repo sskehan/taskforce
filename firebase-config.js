@@ -11,10 +11,10 @@ export const firebaseConfig = {
 };
 
 // Firebase console > Project settings > Cloud Messaging > Web Push certificates > Key pair
-export const vapidKey = "PASTE_VAPID_KEY";
+export const vapidKey = "BHyFA8t7QvtF81v8dJ6RSrz-E1T_WMmmdTjFu60BR3FFd1HdYdzwo8E5ouYprqeDsbib-ORslcmUkeu2VZv_ebw";
 
 // The two people who use TaskForce. Emails must match the sign-ins you create in Firebase.
 export const people = [
-  { key: "shaun", name: "Shaun", email: "PASTE_SHAUN_EMAIL" },
-  { key: "lyndsey", name: "Lyndsey", email: "PASTE_LYNDSEY_EMAIL" }
+  { key: "shaun", name: "Shaun", email: "shaun_skehan@hotmail.com" },
+  { key: "lyndsey", name: "Lyndsey", email: "lyndsey_gpn@yahoo.com" }
 ];
