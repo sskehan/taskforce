@@ -1,5 +1,5 @@
-yaml
 name: Keep reminders switched on
+# GitHub pauses hourly jobs in repos with no activity for 60 days. This makes a tiny commit each month.
 on:
   schedule:
     - cron: '23 3 1 * *'
@@ -12,9 +12,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: |
-          date -u +"%Y-%m-%dT%H:%M:%SZ" > keepalive.txt
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > .github/keepalive.txt
           git config user.name "TaskForce bot"
           git config user.email "actions@users.noreply.github.com"
-          git add keepalive.txt
+          git add .github/keepalive.txt
           git commit -m "Keep reminders running" || echo "nothing to commit"
           git push

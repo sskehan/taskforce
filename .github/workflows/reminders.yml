@@ -1,8 +1,7 @@
-yaml
 name: TaskForce reminders
 on:
   schedule:
-    - cron: '7 * * * *'
+    - cron: '7 * * * *'   # every hour at :07 (GitHub can run a few minutes late)
   workflow_dispatch:
     inputs:
       test:
@@ -23,4 +22,4 @@ jobs:
       - run: node reminders/send.mjs
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          TEST: ${{ github.event.inputs.test 
+          TEST: ${{ github.event.inputs.test || 'false' }}
