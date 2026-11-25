@@ -2,7 +2,7 @@ import * as L from './logic.js';
 import { createStore, DEMO } from './store.js';
 import { DEFAULT_CATEGORIES } from './seed.js';
 
-export const VERSION = '1.02';
+export const VERSION = '1.03';
 const store = createStore();
 const S = { me: null, jobs: [], history: [], settings: { categories: DEFAULT_CATEGORIES, defaultTime: '18:00' }, filter: 'all', search: null, loaded: false, sheet: null, pending: null, editing: null };
 const $app = document.getElementById('app');
@@ -295,13 +295,14 @@ function viewEdit(id, params) {
   <div class="grp"><label for="f-name">Name</label><input id="f-name" class="field" name="name" value="${esc(e.name)}" required maxlength="80" placeholder="${e.type === 'item' ? 'e.g. CPAP hose' : 'e.g. Clean bathroom'}"><div class="err" id="name-err" hidden>Give it a name first</div></div>
   <div class="grp"><span class="l">Type</span><div class="seg">${segB('type', 'job', 'Job')}${segB('type', 'item', 'Item to replace')}</div></div>
   <div class="grp"><label for="f-cat">Category</label><select id="f-cat" class="field" name="category">${cats().map(c => opt(c.id, c.name, e.category)).join('')}</select></div>
-  <div class="grp"><span class="l">${e.type === 'item' ? 'Suggested life' : 'Repeat every'}</span><div class="inline"><input class="field" style="width:80px;text-align:center;font-weight:700" type="number" min="1" max="99" name="every" value="${esc(e.every)}" aria-label="Number"><select class="field" name="unit" aria-label="Unit">${['days', 'weeks', 'months', 'years'].map(u => opt(u, u, e.unit)).join('')}</select></div></div>
+  <div class="grp"><span class="l">${e.type === 'item' ? 'Suggested life' : 'Repeat every'}</span><div class="inline"><input class="field" style="width:80px;text-align:center;font-weight:700" type="number" min="1" max="99" name="every" value="${esc(e.every)}" aria-label="Number" data-recalc><select class="field" name="unit" aria-label="Unit" data-recalc>${['days', 'weeks', 'months', 'years'].map(u => opt(u, u, e.unit)).join('')}</select></div></div>
   <div class="grp box" style="padding:8px 12px;gap:0"><span class="l" style="padding-top:4px">Next due is counted from</span>
-    <label class="radio"><input type="radio" name="countFrom" value="done" ${e.countFrom !== 'fixed' ? 'checked' : ''}><span>When it’s done<br><span class="hint">Done late? The next date moves with you.</span></span></label>
-    <label class="radio"><input type="radio" name="countFrom" value="fixed" ${e.countFrom === 'fixed' ? 'checked' : ''}><span>Fixed schedule<br><span class="hint">Stays on its set dates, however late it’s done.</span></span></label></div>
-  <div class="grp"><label for="f-day">On day</label><select id="f-day" class="field" name="onDay">${opt('', 'Any day', e.onDay ?? '')}${L.DAY_NAMES.map((d, i) => opt(i, d, e.onDay ?? '')).join('')}</select></div>
+    <label class="radio"><input type="radio" name="countFrom" value="done" data-recalc ${e.countFrom !== 'fixed' ? 'checked' : ''}><span>When it’s done<br><span class="hint">Done late? The next date moves with you.</span></span></label>
+    <label class="radio"><input type="radio" name="countFrom" value="fixed" data-recalc ${e.countFrom === 'fixed' ? 'checked' : ''}><span>Fixed schedule<br><span class="hint">Stays on its set dates, however late it’s done.</span></span></label></div>
+  <div class="grp"><label for="f-day">On day</label><select id="f-day" class="field" name="onDay" data-recalc>${opt('', 'Any day', e.onDay ?? '')}${L.DAY_NAMES.map((d, i) => opt(i, d, e.onDay ?? '')).join('')}</select></div>
   <div class="inline"><div class="grp" style="flex:1"><label for="f-due">Next due</label><input id="f-due" class="field" type="date" name="nextDue" value="${esc(e.nextDue || '')}"></div>
-  <div class="grp" style="flex:1"><label for="f-last">${e.type === 'item' ? 'Last replaced' : 'Last done'}</label><input id="f-last" class="field" type="date" name="lastDone" value="${esc(e.lastDone || '')}"></div></div>
+  <div class="grp" style="flex:1"><label for="f-last">${e.type === 'item' ? 'Last replaced' : 'Last done'}</label><input id="f-last" class="field" type="date" name="lastDone" value="${esc(e.lastDone || '')}" data-recalc></div></div>
+  <div class="hint" id="due-hint" aria-live="polite" style="margin-top:-6px"></div>
   <div class="grp"><label for="f-rw">Remind me</label><select id="f-rw" class="field" name="remindWhen">${opt('due', 'On the due day', e.remindWhen)}${opt('1d', '1 day before', e.remindWhen)}${opt('3d', '3 days before', e.remindWhen)}${opt('1w', '1 week before', e.remindWhen)}${opt('none', 'No reminder', e.remindWhen)}</select></div>
   <div class="inline"><div class="grp" style="flex:1"><label for="f-ra">If not done, remind again</label><select id="f-ra" class="field" name="remindAgain">${opt('never', 'Never', e.remindAgain)}${opt('daily', 'Daily', e.remindAgain)}${opt('2d', 'Every 2 days', e.remindAgain)}${opt('3d', 'Every 3 days', e.remindAgain)}${opt('weekly', 'Weekly', e.remindAgain)}</select></div>
   <div class="grp" style="width:120px"><label for="f-rt">At</label><input id="f-rt" class="field" type="time" step="3600" name="remindTime" value="${esc(e.remindTime || '18:00')}"></div></div>
@@ -527,8 +528,29 @@ function syncForm() {
 document.addEventListener('input', ev => {
   if (ev.target.id === 'q') { S.search = ev.target.value; const pos = ev.target.selectionStart; rerender(); const q = document.getElementById('q'); q.focus(); q.setSelectionRange(pos, pos); }
 });
+// Edit form: when the repeat or last-done date changes, work out the new due date straight away.
+function recalcDue() {
+  const f = document.querySelector('[data-form=edit]'); if (!f) return;
+  const fd = new FormData(f), hint = document.getElementById('due-hint'), due = f.querySelector('[name=nextDue]');
+  const job = { every: Math.max(1, Number(fd.get('every')) || 1), unit: fd.get('unit'), countFrom: fd.get('countFrom') === 'fixed' ? 'fixed' : 'done', onDay: fd.get('onDay') === '' ? null : Number(fd.get('onDay')), nextDue: due.value };
+  const last = fd.get('lastDone'), t = T();
+  if (job.countFrom === 'done' && last) {
+    const nd = L.nextDueAfter(job, last);
+    due.value = nd;
+    hint.textContent = `Next due updated to ${L.niceDate(nd, t)} (${L.intervalText(job.every, job.unit)} after ${L.niceDate(last, t)}).`;
+  } else if (job.countFrom === 'fixed' && due.value && job.onDay !== null) {
+    const nd = L.snapToWeekday(due.value, job.onDay);
+    if (nd !== due.value) { due.value = nd; hint.textContent = `Next due moved to ${L.niceDate(nd, t)} to land on a ${L.DAY_NAMES[job.onDay]}.`; }
+    else hint.textContent = 'Fixed schedule: the next due date stays as set; the new repeat applies after that.';
+  } else if (job.countFrom === 'fixed') {
+    hint.textContent = 'Fixed schedule: the next due date stays as set; the new repeat applies after that.';
+  } else hint.textContent = 'Add a last-done date to work out the next due date.';
+  if (S.editing) S.editing.nextDue = due.value;
+}
 document.addEventListener('change', async ev => {
-  const el = ev.target, c = el.dataset.change; if (!c) return;
+  const el = ev.target;
+  if (el.hasAttribute && el.hasAttribute('data-recalc')) { recalcDue(); return; }
+  const c = el.dataset.change; if (!c) return;
   const j = el.dataset.id ? findJob(el.dataset.id) : null;
   switch (c) {
     case 'due': if (j && el.value) { await store.saveJob(j.id, { nextDue: el.value }); toast('Due date changed', L.niceDate(el.value, T())); } break;
@@ -577,6 +599,12 @@ document.addEventListener('submit', async ev => {
     };
     job.nextDue = e.nextDue || (job.lastDone ? L.addInterval(job.lastDone, job.every, job.unit) : t);
     const id = f.dataset.id;
+    // Safety net: repeat changed but the due date wasn't touched, on a job counted from when it's done.
+    const orig = id ? findJob(id) : null;
+    if (orig && job.countFrom === 'done' && job.lastDone && job.nextDue === orig.nextDue &&
+        (String(orig.every) !== String(job.every) || orig.unit !== job.unit || orig.countFrom !== job.countFrom || String(orig.onDay ?? '') !== String(job.onDay ?? '') || orig.lastDone !== job.lastDone)) {
+      job.nextDue = L.nextDueAfter(job, job.lastDone);
+    }
     if (id) { await store.saveJob(id, job); S.editing = null; history.back(); toast('Saved', name); }
     else {
       const nid = await store.saveJob(null, { ...job, steps: [], createdBy: S.me.key, createdAt: nowIso() });
