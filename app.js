@@ -1,8 +1,9 @@
-import * as L from './logic.js?v=1.07';
-import { createStore, DEMO } from './store.js?v=1.07';
+import * as L from './logic.js?v=1.08';
+import { createStore, DEMO } from './store.js?v=1.08';
+import * as DBX from './dropbox.js?v=1.08';
 import { DEFAULT_CATEGORIES } from './seed.js';
 
-export const VERSION = '1.07';
+export const VERSION = '1.08';
 const store = createStore();
 const S = { me: null, jobs: [], history: [], projects: [], events: [], cal: null, edProj: null, edEv: null, settings: { categories: DEFAULT_CATEGORIES, defaultTime: '18:00' }, filter: 'all', search: null, loaded: false, sheet: null, pending: null, editing: null };
 const $app = document.getElementById('app');
@@ -43,6 +44,7 @@ const I = {
   plane: sv('<path d="M2 16l20-8-6 12-3-5z"/><path d="M13 15l-3 5"/>'),
   event: sv('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M8 15h3"/>', 2),
   dollar: sv('<path d="M12 3v18M17 7H9.5a2.5 2.5 0 0 0 0 5h5a2.5 2.5 0 0 1 0 5H7"/>', 2),
+  cloud: sv('<path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 8.5a4.75 4.75 0 0 1-.5 9.5H7z"/><path d="M12 11v5M9.5 13.5 12 11l2.5 2.5"/>', 2),
   timer: sv('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/>', 2),
   left: sv('<path d="M15 18l-6-6 6-6"/>', 2.4), right: sv('<path d="M9 6l6 6-6 6"/>', 2.4),
   gear: sv('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>', 2)
@@ -324,6 +326,36 @@ function viewEdit(id, params) {
   </form></div>`;
 }
 
+// ---------- Dropbox backup (v1.08) ----------
+const DROPBOX_KEY = 'enijr7cppabdid5'; // TaskForce Dropbox app (not secret)
+const backupText = () => JSON.stringify({ app: 'TaskForce', version: VERSION, exported: nowIso(), jobs: S.jobs, history: S.history, projects: S.projects, events: S.events, settings: S.settings }, null, 1);
+const dataHash = () => { const x = { ...S.settings }; delete x.dropboxLast; const str = JSON.stringify([S.jobs, S.history, S.projects, S.events, x]); let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0; return String(h) + ':' + str.length; };
+let dbxTimer = null, dbxBusy = false;
+async function runBackup(manual) {
+  if (dbxBusy || !DBX.status().connected || !S.loaded) return;
+  const h = dataHash();
+  if (!manual && h === localStorage.getItem('tf-dbx-hash')) return;
+  dbxBusy = true;
+  try {
+    const at = await DBX.backup(backupText(), T());
+    localStorage.setItem('tf-dbx-hash', h);
+    await store.saveSettings({ dropboxLast: { at, by: S.me.key } });
+    if (manual) toast('Backed up to Dropbox', 'Apps › TaskForce');
+  } catch (e) { console.warn('Dropbox backup', e); if (manual) toast('Dropbox backup failed', e.message); }
+  dbxBusy = false;
+  if (location.hash.startsWith('#/settings')) rerender();
+}
+// Back up automatically a minute after changes stop, if this phone is connected.
+function scheduleBackup() { if (!DBX.status().connected) return; clearTimeout(dbxTimer); dbxTimer = setTimeout(() => runBackup(false), 60000); }
+function dropboxRows() {
+  const st = DBX.status(), t = T(), shared = S.settings.dropboxLast;
+  const when = iso => { if (!iso) return 'never'; const d = new Date(iso); const day = L.nowIn(L.TZ).date; return `${L.niceDate(new Intl.DateTimeFormat('en-CA', { timeZone: L.TZ }).format(d), day)}, ${d.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', timeZone: L.TZ })}`; };
+  if (!st.connected) return `<div class="row" style="flex-wrap:wrap;gap:10px">${I.cloud ? I.cloud.replace('<svg', '<svg class="ri"') : ''}<div style="flex:1;min-width:200px"><div class="rt">Dropbox backup</div><div class="rs">${shared ? `Last Dropbox backup ${esc(when(shared.at))} by ${esc(person(shared.by).name)}. ` : ''}${st.error ? esc(st.error) + ' ' : ''}Connect once on this phone and TaskForce backs itself up automatically.</div></div></div>
+    <form class="addstep" data-form="dbx"><input name="key" placeholder="Dropbox App key" value="${esc(S.settings.dropboxKey || DROPBOX_KEY)}" aria-label="Dropbox App key" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn terra" style="flex:none;min-height:42px;font-size:13px;padding:0 14px">Connect</button></form>`;
+  return `<div class="row">${I.cloud ? I.cloud.replace('<svg', '<svg class="ri"') : ''}<div style="flex:1"><div class="rt">Dropbox backup <span class="pill p-ok" style="margin-left:4px">On</span></div><div class="rs">${st.account ? esc(st.account) + ' · ' : ''}Last backup ${esc(when(st.last || shared?.at))}. Backs up a minute after changes, keeps 30 daily copies in Apps › TaskForce.</div></div></div>
+    <div class="row" style="gap:8px"><button class="btn" style="min-height:40px;font-size:13px" data-act="dbxnow">Back up now</button><button class="btn alt" style="min-height:40px;font-size:13px;box-shadow:none" data-act="dbxrestore">Restore…</button><button class="btn ghost" style="flex:none;min-height:40px;font-size:13px;color:var(--late-d)" data-act="dbxoff">Disconnect</button></div>`;
+}
+
 function viewSettings() {
   const ps = store.pushStatus();
   const pushTxt = { granted: 'On for this phone', denied: 'Blocked in phone settings', default: 'Not turned on yet', demo: 'Available once Firebase is set up', unsupported: 'Not supported in this browser' }[ps] || ps;
@@ -347,6 +379,7 @@ function viewSettings() {
     <form class="addstep" data-form="cat" style="flex-wrap:wrap"><input name="name" placeholder="New category" maxlength="20" aria-label="New category name" style="flex-basis:100%"><select name="color" class="field" style="width:auto;min-height:42px" aria-label="Colour">${COLORS.map(c => `<option value="${c}">${COLOR_NAMES[c]}</option>`).join('')}</select><select name="icon" class="field" style="width:auto;min-height:42px" aria-label="Icon">${ICONS.map(c => `<option value="${c}">${c}</option>`).join('')}</select><button class="iconbtn" aria-label="Add category" style="box-shadow:none;background:var(--soft)">${I.plus}</button></form>
   </div>
   <div class="lab">Your data</div><div class="box">
+    ${dropboxRows()}
     <button class="row" data-act="export"><span class="rt">Back up to a file</span><span class="end">.json</span></button>
     <label class="row"><span class="rt">Restore from a backup file</span><input type="file" accept=".json,application/json" data-change="import" style="display:none"></label>
     ${!S.jobs.length ? `<button class="row" data-act="starter"><span class="rt" style="color:var(--terra-d);font-weight:700">Load my starter list (22 to-dos)</span></button>` : ''}
@@ -895,7 +928,7 @@ document.addEventListener('click', async ev => {
     case 'signout': await store.signOut(); break;
     case 'push': { const r = await store.enablePush(); toast(r.ok ? 'Reminders on' : 'Reminders', r.msg); rerender(); break; }
     case 'delcat': { const cs = clone(cats()); cs.splice(+el.dataset.i, 1); await store.saveSettings({ categories: cs }); break; }
-    case 'export': download(`taskforce-backup-${T()}.json`, JSON.stringify({ app: 'TaskForce', version: VERSION, exported: nowIso(), jobs: S.jobs, history: S.history, projects: S.projects, events: S.events, settings: S.settings }, null, 1)); break;
+    case 'export': download(`taskforce-backup-${T()}.json`, backupText()); break;
     // projects
     case 'pfilter': S.pfilter = el.dataset.f; rerender(); break;
     case 'pseg': syncProjForm(); S.edProj[el.dataset.f || 'assignee'] = el.dataset.v; if (el.dataset.f === 'kind' && el.dataset.v === 'hobby' && !S.edProj.hobby) S.edProj.hobby = hobbies()[0]?.id || ''; rerender(); break;
@@ -956,6 +989,21 @@ document.addEventListener('click', async ev => {
     case 'evrange': syncEvForm(); S.edEv.range = el.dataset.v === '1'; if (S.edEv.range && (!S.edEv.endDate || S.edEv.endDate < S.edEv.date)) S.edEv.endDate = S.edEv.date; rerender(); break;
     case 'evvis': syncEvForm(); S.edEv.visibility = el.dataset.v; rerender(); break;
     case 'evdelete': if (confirm('Delete this event?')) { await store.deleteDoc('events', id); S.edEv = null; location.replace('#/calendar'); toast('Event deleted', ''); } break;
+    case 'dbxnow': await runBackup(true); break;
+    case 'dbxoff': if (confirm('Stop Dropbox backups on this phone? Your existing backups stay in Dropbox.')) { DBX.disconnect(); localStorage.removeItem('tf-dbx-hash'); rerender(); toast('Dropbox disconnected', ''); } break;
+    case 'dbxrestore': {
+      const days = await DBX.listDaily();
+      const pick = prompt(`Restore which backup?\n\nType 0 for the latest, or a date:\n${days.slice(0, 10).map(n => n.replace('taskforce-', '').replace('.json', '')).join('\n')}`, '0');
+      if (pick === null) break;
+      try {
+        const path = pick.trim() === '0' || !pick.trim() ? DBX.LATEST : `/daily/taskforce-${pick.trim()}.json`;
+        const data = await DBX.download(path);
+        if (!Array.isArray(data.jobs)) throw new Error('Not a TaskForce backup');
+        const replace = confirm(`Restore ${data.jobs.length} to-dos and ${(data.projects || []).length} projects from Dropbox?\n\nOK = replace everything now in TaskForce\nCancel = add them to what's there`);
+        await store.importAll(data, replace); toast('Restored from Dropbox', `${data.jobs.length} to-dos`);
+      } catch (e) { toast('Couldn’t restore', e.message); }
+      break;
+    }
     case 'starter': await store.loadStarter(); toast('Starter list loaded', '22 to-dos added'); break;
     case 'resetdemo': await store.resetDemo(); toast('Demo reset', ''); break;
   }
@@ -1061,6 +1109,11 @@ document.addEventListener('submit', async ev => {
     else await store.saveDoc('events', null, { ...data, createdBy: S.me.key, createdAt: nowIso() });
     S.edEv = null; if (S.cal) { S.cal.sel = data.date; S.cal.month = data.date.slice(0, 7); } else S.cal = { month: data.date.slice(0, 7), sel: data.date, view: 'month' };
     location.replace('#/calendar'); toast(id ? 'Event saved' : 'Event added', `${title} · ${L.niceDate(data.date, T())}`);
+  } else if (f.dataset.form === 'dbx') {
+    const key = String(fd.get('key') || '').trim();
+    if (!key) { toast('Paste the Dropbox App key first', ''); return; }
+    if (key !== S.settings.dropboxKey) await store.saveSettings({ dropboxKey: key });
+    try { await DBX.connect(key); } catch (e) { toast('Couldn’t start Dropbox', e.message); }
   } else if (f.dataset.form === 'cat') {
     const name = String(fd.get('name') || '').trim(); if (!name) return;
     const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 20) || 'cat';
@@ -1099,6 +1152,7 @@ document.addEventListener('keydown', ev => {
 window.addEventListener('hashchange', () => { S.sheet = null; render(); window.scrollTo(0, 0); });
 
 // ---------- start ----------
+DBX.finishConnect().then(r => { if (r) { toast(r.ok ? 'Dropbox connected' : 'Dropbox', r.ok ? 'Backing up now…' : r.msg); if (r.ok) { let n = 0; const go = () => S.loaded ? runBackup(true) : (n++ < 40 && setTimeout(go, 500)); setTimeout(go, 1500); } if (S.loaded) rerender(); } }).catch(e => toast('Dropbox', e.message));
 let unsubs = [];
 store.start(me => {
   unsubs.forEach(u => typeof u === 'function' && u()); unsubs = [];
@@ -1108,12 +1162,14 @@ store.start(me => {
   S.loaded = false; let got = 0;
   const ready = () => { if (++got >= 2) { S.loaded = true; } render(); };
   let first = { jobs: true, hist: true };
-  unsubs.push(store.onJobs(list => { S.jobs = list; if (first.jobs) { first.jobs = false; ready(); } else rerender(); }));
-  unsubs.push(store.onHistory(list => { S.history = list; if (first.hist) { first.hist = false; ready(); } else rerender(); }));
-  unsubs.push(store.onCol('projects', list => { S.projects = list; if (S.loaded) rerender(); }));
-  unsubs.push(store.onCol('events', list => { S.events = list; if (S.loaded) rerender(); }));
+  unsubs.push(store.onJobs(list => { S.jobs = list; if (first.jobs) { first.jobs = false; ready(); } else { rerender(); scheduleBackup(); } }));
+  unsubs.push(store.onHistory(list => { S.history = list; if (first.hist) { first.hist = false; ready(); } else { rerender(); scheduleBackup(); } }));
+  unsubs.push(store.onCol('projects', list => { S.projects = list; if (S.loaded) { rerender(); scheduleBackup(); } }));
+  unsubs.push(store.onCol('events', list => { S.events = list; if (S.loaded) { rerender(); scheduleBackup(); } }));
   unsubs.push(store.onSettings(s => { S.settings = { categories: DEFAULT_CATEGORIES, defaultTime: '18:00', ...s }; if (S.loaded) rerender(); }));
   render();
+  // Daily safety net: back up shortly after opening if the last Dropbox backup is over 20 hours old.
+  setTimeout(() => { const st = DBX.status(); if (st.connected && (!st.last || Date.now() - Date.parse(st.last) > 20 * 3600e3)) runBackup(false); }, 8000);
 }).catch(e => { $app.innerHTML = `<div class="login">${shieldSvg(72)}<div class="err">Couldn’t start TaskForce: ${esc(e.message || e)}</div></div>`; });
 
 if ('serviceWorker' in navigator) {
