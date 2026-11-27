@@ -1,9 +1,10 @@
 // TaskForce reminder bot. Runs every hour on GitHub Actions and sends push reminders
-// for jobs that are due, using the same rules as the app (logic.js).
+// for jobs, calendar events and project prep, using the same rules as the app (logic.js).
+// Job reminders pause for anyone marked away on the calendar.
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
-import { shouldNotify, nowIn, daysUntil, niceDate, TZ } from '../logic.js';
+import { shouldNotify, nowIn, daysUntil, niceDate, TZ, eventReminderDue, awayPeople, prepDue, addDays } from '../logic.js';
 
 const sa = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
 if (!sa.project_id) { console.error('FIREBASE_SERVICE_ACCOUNT secret is missing.'); process.exit(1); }
@@ -44,14 +45,21 @@ if (TEST) {
   process.exit(0);
 }
 
-const jobs = (await db.collection('jobs').get()).docs.map(d => ({ ...d.data(), id: d.id }));
+const all = async c => (await db.collection(c).get()).docs.map(d => ({ ...d.data(), id: d.id }));
+const [jobs, events, projects] = await Promise.all([all('jobs'), all('events'), all('projects')]);
+const appSet = (await db.collection('settings').doc('app').get()).data() || {};
+const defHour = Number(String(appSet.defaultTime || '18:00').split(':')[0]) || 18;
+const everyone = Object.keys(users);
+const away = awayPeople(events, now.date, everyone);
+if (away.size) console.log(`Away today: ${[...away].join(', ')} (job reminders paused)`);
 const due = jobs.filter(j => shouldNotify(j, now));
 console.log(`${jobs.length} jobs, ${due.length} reminder(s) due now`);
 
 // Group by person so a busy day is one tidy notification, not a flood.
 const perPerson = {};
 for (const j of due) {
-  const keys = !j.assignee || j.assignee === 'either' ? Object.keys(users) : [j.assignee];
+  const keys = (!j.assignee || j.assignee === 'either' ? everyone : [j.assignee]).filter(k => !away.has(k));
+  j._sent = keys.length > 0;
   for (const k of keys) (perPerson[k] = perPerson[k] || []).push(j);
 }
 const line = j => {
@@ -73,6 +81,26 @@ for (const [k, list] of Object.entries(perPerson)) {
     await sendTo([k], { title: `${list.length} jobs need you`, body: `${names} +${list.length - 3} more`, hash: '#/jobs', tag: 'summary' });
   }
 }
-for (const j of due) await db.collection('jobs').doc(j.id).update({ notify: { due: j.nextDue, last: now.date } });
-await db.collection('settings').doc('bot').set({ lastRun: new Date().toISOString(), lastSent: due.length }, { merge: true });
+for (const j of due.filter(j => j._sent)) await db.collection('jobs').doc(j.id).update({ notify: { due: j.nextDue, last: now.date } });
+
+// Calendar events
+let evSent = 0;
+for (const ev of events) {
+  const occ = eventReminderDue(ev, now, defHour); if (!occ) continue;
+  const keys = ev.visibility === 'private' && ev.owner ? [ev.owner] : everyone;
+  const when = occ === now.date ? (ev.allDay === false && ev.start ? `today at ${ev.start}` : 'today') : occ === addDays(now.date, 1) ? 'tomorrow' : niceDate(occ, now.date);
+  await sendTo(keys, { title: ev.title, body: `${ev.type || 'Event'} · ${when}`, hash: '#/calendar', tag: 'ev-' + ev.id });
+  await db.collection('events').doc(ev.id).update({ notify: { occ, last: now.date } }); evSent++;
+}
+// Project "get ready" reminders
+let prepSent = 0;
+for (const p of projects) {
+  const list = prepDue(p, now, defHour); if (!list.length) continue;
+  const keys = !p.assignee || p.assignee === 'either' ? everyone : [p.assignee];
+  for (const x of list) await sendTo(keys, { title: `Get ready: ${x.text}`, body: `For ${p.name}`, hash: '#/project/' + p.id, tag: 'prep-' + p.id });
+  const prep = (p.prep || []).map(x => list.some(y => y.text === x.text && y.date === x.date) ? { ...x, notified: true } : x);
+  await db.collection('projects').doc(p.id).update({ prep }); prepSent += list.length;
+}
+console.log(`${evSent} event reminder(s), ${prepSent} prep reminder(s)`);
+await db.collection('settings').doc('bot').set({ lastRun: new Date().toISOString(), lastSent: due.length + evSent + prepSent }, { merge: true });
 console.log('Done.');
