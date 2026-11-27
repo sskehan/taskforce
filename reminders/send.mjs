@@ -78,7 +78,7 @@ for (const [k, list] of Object.entries(perPerson)) {
     }
   } else {
     const names = list.slice(0, 3).map(j => j.name).join(', ');
-    await sendTo([k], { title: `${list.length} jobs need you`, body: `${names} +${list.length - 3} more`, hash: '#/jobs', tag: 'summary' });
+    await sendTo([k], { title: `${list.length} to-dos need you`, body: `${names} +${list.length - 3} more`, hash: '#/jobs', tag: 'summary' });
   }
 }
 for (const j of due.filter(j => j._sent)) await db.collection('jobs').doc(j.id).update({ notify: { due: j.nextDue, last: now.date } });
