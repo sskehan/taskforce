@@ -4,7 +4,7 @@
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
-import { shouldNotify, nowIn, daysUntil, niceDate, TZ, eventReminderDue, awayPeople, prepDue, addDays } from '../logic.js';
+import { shouldNotify, nowIn, daysUntil, niceDate, TZ, eventReminderDue, awayPeople, prepDue, tasksDue, addDays } from '../logic.js';
 
 const sa = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
 if (!sa.project_id) { console.error('FIREBASE_SERVICE_ACCOUNT secret is missing.'); process.exit(1); }
@@ -94,13 +94,30 @@ for (const ev of events) {
 }
 // Project "get ready" reminders
 let prepSent = 0;
+let taskSent = 0;
 for (const p of projects) {
-  const list = prepDue(p, now, defHour); if (!list.length) continue;
-  const keys = !p.assignee || p.assignee === 'either' ? everyone : [p.assignee];
-  for (const x of list) await sendTo(keys, { title: `Get ready: ${x.text}`, body: `For ${p.name}`, hash: '#/project/' + p.id, tag: 'prep-' + p.id });
-  const prep = (p.prep || []).map(x => list.some(y => y.text === x.text && y.date === x.date) ? { ...x, notified: true } : x);
-  await db.collection('projects').doc(p.id).update({ prep }); prepSent += list.length;
+  // A "just me" project only ever reminds its owner.
+  const priv = p.visibility === 'private' && p.owner;
+  const projKeys = priv ? [p.owner] : !p.assignee || p.assignee === 'either' ? everyone : [p.assignee];
+  const upd = {};
+  const list = prepDue(p, now, defHour);
+  if (list.length) {
+    for (const x of list) await sendTo(projKeys, { title: `Get ready: ${x.text}`, body: `For ${p.name}`, hash: '#/project/' + p.id, tag: 'prep-' + p.id });
+    upd.prep = (p.prep || []).map(x => list.some(y => y.text === x.text && y.date === x.date) ? { ...x, notified: true } : x);
+    prepSent += list.length;
+  }
+  const tl = tasksDue(p, now, defHour);
+  if (tl.length) {
+    for (const x of tl) {
+      const keys = priv ? [p.owner] : x.who && x.who !== 'either' ? [x.who] : projKeys;
+      const late = x.due < now.date;
+      await sendTo(keys, { title: x.text, body: `${p.name} · ${late ? 'was due ' + niceDate(x.due, now.date) : 'due today'}`, hash: '#/project/' + p.id, tag: 'task-' + p.id });
+    }
+    upd.steps = (p.steps || []).map(x => tl.includes(x) ? { ...x, notified: true } : x);
+    taskSent += tl.length;
+  }
+  if (Object.keys(upd).length) await db.collection('projects').doc(p.id).update(upd);
 }
-console.log(`${evSent} event reminder(s), ${prepSent} prep reminder(s)`);
-await db.collection('settings').doc('bot').set({ lastRun: new Date().toISOString(), lastSent: due.length + evSent + prepSent }, { merge: true });
+console.log(`${evSent} event reminder(s), ${prepSent} prep reminder(s), ${taskSent} task reminder(s)`);
+await db.collection('settings').doc('bot').set({ lastRun: new Date().toISOString(), lastSent: due.length + evSent + prepSent + taskSent }, { merge: true });
 console.log('Done.');
