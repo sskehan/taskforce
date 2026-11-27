@@ -19,15 +19,34 @@ const b64url = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(
 
 export function status() { const s = load(); return { connected: !!s.refresh, last: s.last || null, account: s.account || '', error: s.error || '' }; }
 
+export function pending() { return !!load().verifier && !load().refresh; }
+
+// Step 1: open Dropbox in a new window. Dropbox shows a code to copy (no redirect needed,
+// which is more reliable for an installed phone app).
 export async function connect(appKey) {
   appKey = String(appKey || '').trim();
   if (!appKey) throw new Error('Enter the Dropbox App key first');
   const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));
   const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
-  const st = b64url(crypto.getRandomValues(new Uint8Array(12)));
-  save({ ...load(), appKey, verifier, state: st, back: location.hash || '#/settings' });
-  const q = new URLSearchParams({ client_id: appKey, response_type: 'code', code_challenge: challenge, code_challenge_method: 'S256', token_access_type: 'offline', redirect_uri: redirectUri(), state: st });
-  location.href = AUTH + '?' + q;
+  save({ ...load(), appKey, verifier, error: '' });
+  const q = new URLSearchParams({ client_id: appKey, response_type: 'code', code_challenge: challenge, code_challenge_method: 'S256', token_access_type: 'offline' });
+  const w = window.open(AUTH + '?' + q, '_blank');
+  if (!w) location.href = AUTH + '?' + q;
+}
+export function cancelConnect() { const s = load(); save({ appKey: s.appKey, last: s.last }); }
+
+// Step 2: paste the code Dropbox showed.
+export async function finishWithCode(code) {
+  const s = load();
+  code = String(code || '').trim();
+  if (!code) throw new Error('Paste the code from Dropbox');
+  if (!s.verifier) throw new Error('Tap Connect first');
+  const r = await fetch(TOKEN, { method: 'POST', body: new URLSearchParams({ code, grant_type: 'authorization_code', code_verifier: s.verifier, client_id: s.appKey }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.refresh_token) throw new Error(j.error_description ? (/code/i.test(j.error_description) ? 'That code didn’t work. Tap Connect again for a fresh code.' : j.error_description) : 'Dropbox said no (' + r.status + ')');
+  save({ appKey: s.appKey, refresh: j.refresh_token, access: j.access_token, exp: Date.now() + (j.expires_in - 60) * 1000, last: s.last || null });
+  try { const a = await api('users/get_current_account', null); save({ ...load(), account: a.email || a.name?.display_name || '' }); } catch { }
+  return true;
 }
 
 // Call once at start-up: finishes the sign-in when Dropbox sends us back with ?code=

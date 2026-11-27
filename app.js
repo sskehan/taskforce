@@ -1,9 +1,9 @@
-import * as L from './logic.js?v=1.08';
-import { createStore, DEMO } from './store.js?v=1.08';
-import * as DBX from './dropbox.js?v=1.08';
+import * as L from './logic.js?v=1.09';
+import { createStore, DEMO } from './store.js?v=1.09';
+import * as DBX from './dropbox.js?v=1.09';
 import { DEFAULT_CATEGORIES } from './seed.js';
 
-export const VERSION = '1.08';
+export const VERSION = '1.09';
 const store = createStore();
 const S = { me: null, jobs: [], history: [], projects: [], events: [], cal: null, edProj: null, edEv: null, settings: { categories: DEFAULT_CATEGORIES, defaultTime: '18:00' }, filter: 'all', search: null, loaded: false, sheet: null, pending: null, editing: null };
 const $app = document.getElementById('app');
@@ -350,6 +350,9 @@ function scheduleBackup() { if (!DBX.status().connected) return; clearTimeout(db
 function dropboxRows() {
   const st = DBX.status(), t = T(), shared = S.settings.dropboxLast;
   const when = iso => { if (!iso) return 'never'; const d = new Date(iso); const day = L.nowIn(L.TZ).date; return `${L.niceDate(new Intl.DateTimeFormat('en-CA', { timeZone: L.TZ }).format(d), day)}, ${d.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', timeZone: L.TZ })}`; };
+  if (!st.connected && DBX.pending()) return `<div class="row" style="flex-wrap:wrap;gap:10px">${I.cloud.replace('<svg', '<svg class="ri"')}<div style="flex:1;min-width:200px"><div class="rt">Connect Dropbox: step 2</div><div class="rs">In the Dropbox window, tap <b>Allow</b>. Dropbox then shows a code. Copy it, come back here and paste it below.</div></div></div>
+    <form class="addstep" data-form="dbxcode"><input name="code" placeholder="Paste the Dropbox code" aria-label="Dropbox code" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn terra" style="flex:none;min-height:42px;font-size:13px;padding:0 14px">Finish</button></form>
+    <div class="row" style="gap:8px"><button class="btn alt" style="min-height:40px;font-size:13px;box-shadow:none" data-act="dbxagain">Open Dropbox again</button><button class="btn ghost" style="flex:none;min-height:40px;font-size:13px" data-act="dbxcancel">Cancel</button></div>`;
   if (!st.connected) return `<div class="row" style="flex-wrap:wrap;gap:10px">${I.cloud ? I.cloud.replace('<svg', '<svg class="ri"') : ''}<div style="flex:1;min-width:200px"><div class="rt">Dropbox backup</div><div class="rs">${shared ? `Last Dropbox backup ${esc(when(shared.at))} by ${esc(person(shared.by).name)}. ` : ''}${st.error ? esc(st.error) + ' ' : ''}Connect once on this phone and TaskForce backs itself up automatically.</div></div></div>
     <form class="addstep" data-form="dbx"><input name="key" placeholder="Dropbox App key" value="${esc(S.settings.dropboxKey || DROPBOX_KEY)}" aria-label="Dropbox App key" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn terra" style="flex:none;min-height:42px;font-size:13px;padding:0 14px">Connect</button></form>`;
   return `<div class="row">${I.cloud ? I.cloud.replace('<svg', '<svg class="ri"') : ''}<div style="flex:1"><div class="rt">Dropbox backup <span class="pill p-ok" style="margin-left:4px">On</span></div><div class="rs">${st.account ? esc(st.account) + ' · ' : ''}Last backup ${esc(when(st.last || shared?.at))}. Backs up a minute after changes, keeps 30 daily copies in Apps › TaskForce.</div></div></div>
@@ -989,6 +992,8 @@ document.addEventListener('click', async ev => {
     case 'evrange': syncEvForm(); S.edEv.range = el.dataset.v === '1'; if (S.edEv.range && (!S.edEv.endDate || S.edEv.endDate < S.edEv.date)) S.edEv.endDate = S.edEv.date; rerender(); break;
     case 'evvis': syncEvForm(); S.edEv.visibility = el.dataset.v; rerender(); break;
     case 'evdelete': if (confirm('Delete this event?')) { await store.deleteDoc('events', id); S.edEv = null; location.replace('#/calendar'); toast('Event deleted', ''); } break;
+    case 'dbxagain': try { await DBX.connect(S.settings.dropboxKey || DROPBOX_KEY); rerender(); } catch (e) { toast('Dropbox', e.message); } break;
+    case 'dbxcancel': DBX.cancelConnect(); rerender(); break;
     case 'dbxnow': await runBackup(true); break;
     case 'dbxoff': if (confirm('Stop Dropbox backups on this phone? Your existing backups stay in Dropbox.')) { DBX.disconnect(); localStorage.removeItem('tf-dbx-hash'); rerender(); toast('Dropbox disconnected', ''); } break;
     case 'dbxrestore': {
@@ -1113,7 +1118,12 @@ document.addEventListener('submit', async ev => {
     const key = String(fd.get('key') || '').trim();
     if (!key) { toast('Paste the Dropbox App key first', ''); return; }
     if (key !== S.settings.dropboxKey) await store.saveSettings({ dropboxKey: key });
-    try { await DBX.connect(key); } catch (e) { toast('Couldn’t start Dropbox', e.message); }
+    try { await DBX.connect(key); rerender(); } catch (e) { toast('Couldn’t start Dropbox', e.message); }
+  } else if (f.dataset.form === 'dbxcode') {
+    try {
+      await DBX.finishWithCode(fd.get('code')); rerender(); toast('Dropbox connected', 'Backing up now…');
+      setTimeout(() => runBackup(true), 800);
+    } catch (e) { toast('Dropbox', e.message); }
   } else if (f.dataset.form === 'cat') {
     const name = String(fd.get('name') || '').trim(); if (!name) return;
     const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 20) || 'cat';
