@@ -1,8 +1,8 @@
-import * as L from './logic.js?v=1.05';
-import { createStore, DEMO } from './store.js?v=1.05';
+import * as L from './logic.js?v=1.06';
+import { createStore, DEMO } from './store.js?v=1.06';
 import { DEFAULT_CATEGORIES } from './seed.js';
 
-export const VERSION = '1.05';
+export const VERSION = '1.06';
 const store = createStore();
 const S = { me: null, jobs: [], history: [], projects: [], events: [], cal: null, edProj: null, edEv: null, settings: { categories: DEFAULT_CATEGORIES, defaultTime: '18:00' }, filter: 'all', search: null, loaded: false, sheet: null, pending: null, editing: null };
 const $app = document.getElementById('app');
@@ -103,9 +103,9 @@ function ring(pct, size, color, track, label, sub) {
   <text x="50%" y="${sub ? '50%' : '55%'}" text-anchor="middle" font-family="Bricolage Grotesque,sans-serif" font-weight="800" font-size="${size * 0.24}" fill="currentColor">${esc(label)}</text>
   ${sub ? `<text x="50%" y="${size * 0.68}" text-anchor="middle" font-family="DM Sans,sans-serif" font-weight="700" font-size="${size * 0.1}" fill="currentColor" opacity=".8">${esc(sub)}</text>` : ''}</svg>`;
 }
-const NAV = [['home', 'home', 'Home', ['home', 'settings']], ['jobs', 'jobs', 'Jobs', ['jobs', 'items', 'history', 'job', 'edit', 'new']], ['projects', 'proj', 'Projects', ['projects', 'project', 'pedit', 'pnew']], ['calendar', 'cal', 'Calendar', ['calendar', 'event']]];
+const NAV = [['home', 'home', 'Home', ['home', 'settings']], ['jobs', 'jobs', 'To Do', ['jobs', 'items', 'history', 'job', 'edit', 'new']], ['projects', 'proj', 'Projects', ['projects', 'project', 'pedit', 'pnew']], ['calendar', 'cal', 'Calendar', ['calendar', 'event']]];
 const nav = () => { const v = route().parts[0] || 'home'; return `<nav class="nav" aria-label="Main">${NAV.map(([r, icon, label, owns]) => `<button class="${owns.includes(v) ? 'on' : ''}" data-act="go" data-to="#/${r}">${I[icon]}${label}</button>`).join('')}</nav>`; };
-const jobsSeg = cur => `<div class="seg" style="margin:0 0 10px" role="tablist">${[['jobs', 'Jobs', S.jobs.length], ['items', 'Items', S.jobs.filter(isItem).length], ['history', 'History', '']].map(([k, l, n]) => `<button class="${cur === k ? 'on' : ''}" role="tab" aria-selected="${cur === k}" data-act="go" data-to="#/${k}">${l}${n !== '' ? ' ' + n : ''}</button>`).join('')}</div>`;
+const jobsSeg = cur => `<div class="seg" style="margin:0 0 10px" role="tablist">${[['jobs', 'To Do', S.jobs.length], ['items', 'Items', S.jobs.filter(isItem).length], ['history', 'History', '']].map(([k, l, n]) => `<button class="${cur === k ? 'on' : ''}" role="tab" aria-selected="${cur === k}" data-act="go" data-to="#/${k}">${l}${n !== '' ? ' ' + n : ''}</button>`).join('')}</div>`;
 const avatars = () => `<button class="avs" data-act="go" data-to="#/settings" aria-label="Settings" style="border:0;background:none;padding:0">${store.people.map(p => `<span class="av ${p.key}">${esc(p.name[0])}</span>`).join('')}</button>`;
 function greeting() {
   const h = L.nowIn().hour;
@@ -126,7 +126,7 @@ function viewHome() {
   <div class="hero" style="margin-top:10px">
     <svg class="deco" width="160" height="160" viewBox="0 0 160 160" aria-hidden="true"><circle cx="80" cy="80" r="70" fill="none" stroke="#C8553D" stroke-width="22"/></svg>
     <span style="color:#fff">${ring(s.score / 100, 96, '#C8553D', '#343B63', s.score + '%')}</span>
-    <div><div class="t1">Home score</div><div class="t2">${s.onTrack} of ${s.total} jobs on track</div>
+    <div><div class="t1">Home score</div><div class="t2">${s.onTrack} of ${s.total} to-dos on track</div>
     ${nd ? `<span class="chipn">Knock off ${nd.n} to hit ${nd.score}%</span>` : `<span class="chipn">All on track. Nice!</span>`}</div>
   </div>
   <div class="stats">
@@ -147,7 +147,7 @@ function viewHome() {
       <div class="hbar" style="width:100%" role="img" aria-label="${o} overdue, ${sn} due soon, ${f} fine">${o ? `<span style="flex:${o};background:#C8553D"></span>` : ''}${sn ? `<span style="flex:${sn};background:#E9C46A"></span>` : ''}${f ? `<span style="flex:${f};background:#6B8F47"></span>` : ''}</div>
       <div class="legend"><span>${o} overdue</span><span>${sn} due soon</span><span>${f} fine</span></div></button>`;
   }).join('')}
-  </div>${nav()}<button class="fab" data-act="go" data-to="#/new" aria-label="Add job">${I.plus}</button>`;
+  </div>${nav()}<button class="fab" data-act="go" data-to="#/new" aria-label="Add to-do">${I.plus}</button>`;
 }
 
 function filtered() {
@@ -168,24 +168,24 @@ function viewJobs() {
   const doneToday = S.history.filter(h => h.date === t && (h.kind === 'done' || h.kind === 'replaced'));
   const bucketChip = ['overdue', 'week', 'month', 'later'].includes(S.filter) ? chip(S.filter, { overdue: 'Overdue', week: 'Next 7 days', month: 'Next 30 days', later: 'Later' }[S.filter]) : '';
   return `<div class="wrap">
-  <div class="top"><h1>Jobs</h1><button class="iconbtn" data-act="search" aria-label="Search">${I.search}</button></div>
+  <div class="top"><h1>To Do</h1><button class="iconbtn" data-act="search" aria-label="Search">${I.search}</button></div>
   ${jobsSeg('jobs')}
-  ${S.search !== null ? `<div style="margin-bottom:8px"><input class="field" id="q" placeholder="Search jobs" value="${esc(S.search)}" aria-label="Search jobs" autofocus></div>` : ''}
+  ${S.search !== null ? `<div style="margin-bottom:8px"><input class="field" id="q" placeholder="Search to-dos" value="${esc(S.search)}" aria-label="Search to-dos" autofocus></div>` : ''}
   <div class="chips">${bucketChip}${chip('all', 'All', S.jobs.length)}${chip('myday', 'My Day', S.jobs.filter(inMyDay).length)}${chip('important', '★ Important', S.jobs.filter(j => j.important).length)}${chip('mine', 'Mine', S.jobs.filter(j => j.assignee === S.me.key).length)}
   ${cats().map(c => chip('cat:' + c.id, c.name, S.jobs.filter(j => j.category === c.id).length)).join('')}</div>
   ${list.length ? groups.map(([b, label]) => {
     const g = list.filter(j => L.bucket(j, t) === b);
     return g.length ? `<div class="lab">${label} · ${g.length}</div><div class="list">${g.map(j => jobCard(j, t)).join('')}</div>` : '';
-  }).join('') : `<div class="empty">${S.filter === 'myday' ? 'Nothing in My Day yet. Open a job and tap “Add to My Day”.' : 'No jobs here.'}</div>`}
+  }).join('') : `<div class="empty">${S.filter === 'myday' ? 'Nothing in My Day yet. Open a to-do and tap “Add to My Day”.' : 'Nothing here.'}</div>`}
   ${doneToday.length && S.filter === 'all' && !S.search ? `<div class="lab">Done today · ${doneToday.length}</div><div class="list">${doneToday.map(h => `<div class="card done" data-act="open" data-id="${h.jobId}" role="button" tabindex="0"><span class="tick on">${I.tick}</span><div class="ct"><div class="t" style="text-decoration:line-through;color:var(--gum-d)">${esc(h.jobName)}</div><div class="s" style="color:var(--gum-d)">${esc(person(h.by).name)}${h.nextDue ? ' · next ' + esc(L.niceDate(h.nextDue, t)) : ''}</div></div></div>`).join('')}</div>` : ''}
-  </div>${nav()}<button class="fab" data-act="go" data-to="#/new" aria-label="Add job">${I.plus}</button>`;
+  </div>${nav()}<button class="fab" data-act="go" data-to="#/new" aria-label="Add to-do">${I.plus}</button>`;
 }
 
 function viewItems() {
   const t = T(), items = S.jobs.filter(isItem).sort(byDue);
   const cs = [...new Set(items.map(j => j.category))];
   return `<div class="wrap">
-  <div class="top"><div><div class="sub">Things that wear out</div><h1>Jobs</h1></div></div>
+  <div class="top"><div><div class="sub">Things that wear out</div><h1>To Do</h1></div></div>
   ${jobsSeg('items')}
   ${cs.map(c => `<div class="lab">${esc(cat(c).name)} · ${items.filter(j => j.category === c).length}</div><div class="list">${items.filter(j => j.category === c).map(j => {
     const used = j.lastDone ? L.daysBetween(j.lastDone, t) : 0, life = j.lastDone && j.nextDue ? Math.max(1, L.daysBetween(j.lastDone, j.nextDue)) : intervalDays(j);
@@ -223,7 +223,7 @@ function viewHistory() {
   const groups = {};
   for (const h of S.history) (groups[h.date] = groups[h.date] || []).push(h);
   const t = T();
-  return `<div class="wrap"><div class="top"><div><div class="sub">Who did what</div><h1>Jobs</h1></div></div>
+  return `<div class="wrap"><div class="top"><div><div class="sub">Who did what</div><h1>To Do</h1></div></div>
   ${jobsSeg('history')}
   ${Object.keys(groups).sort().reverse().slice(0, 60).map(d => `<div class="lab">${d === t ? 'Today' : esc(L.niceDate(d, t))}</div><div class="box">${groups[d].map(h => histRow(h, true)).join('')}</div>`).join('') || '<div class="empty">Nothing yet. Ticks, skips and extensions show up here.</div>'}
   </div>${nav()}`;
@@ -231,7 +231,7 @@ function viewHistory() {
 
 function viewDetail(id) {
   const j = findJob(id), t = T();
-  if (!j) return `<div class="wrap"><div class="top"><button class="iconbtn" data-act="back" aria-label="Back">${I.back}</button></div><div class="empty">That job has been deleted.</div></div>${nav()}`;
+  if (!j) return `<div class="wrap"><div class="top"><button class="iconbtn" data-act="back" aria-label="Back">${I.back}</button></div><div class="empty">That to-do has been deleted.</div></div>${nav()}`;
   const c = cat(j.category), n = L.daysUntil(j, t), late = L.isOverdue(j, t), missed = L.missedDates(j, t);
   const hist = S.history.filter(h => h.jobId === j.id);
   const next = L.nextDueAfter(j, t);
@@ -249,7 +249,7 @@ function viewDetail(id) {
       <div class="btns"><button class="btn" data-act="complete" data-id="${j.id}" data-kind="replaced">Replaced</button><button class="btn alt" style="box-shadow:none" data-act="extend" data-id="${j.id}">Still good…</button></div>`;
   } else {
     head = `<div class="dtitle"><button class="tick" style="width:34px;height:34px;margin-top:2px" data-act="complete" data-id="${j.id}" data-kind="done" aria-label="Mark done">${I.tick}</button><div><h1>${esc(j.name)}</h1><div class="sub" style="margin-top:4px">${esc(c.name)} · ${esc(L.repeatText(j))}</div></div></div>
-      ${late ? `<div class="late"><div><div class="t">${-n} days late${missed.length > 1 ? ` · missed ${missed.slice(-3).map(d => L.shortDate(d, t)).join(', ')}` : ''}</div><div class="s">One job, not a pile of copies. Pick what happens next:</div></div>
+      ${late ? `<div class="late"><div><div class="t">${-n} days late${missed.length > 1 ? ` · missed ${missed.slice(-3).map(d => L.shortDate(d, t)).join(', ')}` : ''}</div><div class="s">One to-do, not a pile of copies. Pick what happens next:</div></div>
       <div class="btns"><button class="btn" data-act="complete" data-id="${j.id}" data-kind="done">Done today<small>next ${esc(L.niceDate(next, t))}</small></button><button class="btn alt" style="box-shadow:inset 0 0 0 2px var(--late-d);color:#7A2406" data-act="complete" data-id="${j.id}" data-kind="skipped">Skip it<small>logged as skipped</small></button></div></div>`
       : `<div class="btns"><button class="btn" data-act="complete" data-id="${j.id}" data-kind="done">Mark done<small>next ${esc(L.niceDate(next, t))}</small></button><button class="btn alt" style="box-shadow:none" data-act="doneon" data-id="${j.id}">Done another day</button></div>`}`;
   }
@@ -287,7 +287,7 @@ function viewDetail(id) {
   <div class="lab">History</div>
   <div class="box">${hist.map(h => histRow(h, false)).join('') || '<div class="empty" style="padding:16px">Each tick will log who, when and how many steps were done.</div>'}
   ${isItem(j) && j.lastDone && !hist.some(h => h.kind === 'replaced' && h.date === j.lastDone) ? `<div class="ev"><span class="dot c-gum">${I.tick}</span><div><div class="et">Replaced</div><div class="es">${esc(L.niceDate(j.lastDone, t))} · first entry</div></div></div>` : ''}</div>
-  <div class="meta"><span>Added by ${esc(person(j.createdBy).name)}${j.createdAt ? ' on ' + esc(L.niceDate(j.createdAt.slice(0, 10), t)) : ''}</span><button class="iconbtn" style="box-shadow:none;background:none" data-act="delete" data-id="${j.id}" aria-label="Delete job">${I.trash}</button></div>
+  <div class="meta"><span>Added by ${esc(person(j.createdBy).name)}${j.createdAt ? ' on ' + esc(L.niceDate(j.createdAt.slice(0, 10), t)) : ''}</span><button class="iconbtn" style="box-shadow:none;background:none" data-act="delete" data-id="${j.id}" aria-label="Delete to-do">${I.trash}</button></div>
   </div>${nav()}`;
 }
 
@@ -302,9 +302,9 @@ function viewEdit(id, params) {
   const opt = (v, label, cur) => `<option value="${v}" ${String(cur) === String(v) ? 'selected' : ''}>${esc(label)}</option>`;
   const segB = (field, v, label) => `<button type="button" class="${e[field] === v ? 'on' : ''}" data-act="seg" data-field="${field}" data-v="${v}">${esc(label)}</button>`;
   return `<div class="wrap"><form data-form="edit" data-id="${id || ''}" class="form" novalidate>
-  <div class="fbar"><button type="button" data-act="back">Cancel</button><span class="hd" style="font-size:17px">${id ? 'Edit' : 'New'} ${e.type === 'item' ? 'item' : 'job'}</span><button class="save" type="submit">Save</button></div>
+  <div class="fbar"><button type="button" data-act="back">Cancel</button><span class="hd" style="font-size:17px">${id ? 'Edit' : 'New'} ${e.type === 'item' ? 'item' : 'to-do'}</span><button class="save" type="submit">Save</button></div>
   <div class="grp"><label for="f-name">Name</label><input id="f-name" class="field" name="name" value="${esc(e.name)}" required maxlength="80" placeholder="${e.type === 'item' ? 'e.g. CPAP hose' : 'e.g. Clean bathroom'}"><div class="err" id="name-err" hidden>Give it a name first</div></div>
-  <div class="grp"><span class="l">Type</span><div class="seg">${segB('type', 'job', 'Job')}${segB('type', 'item', 'Item to replace')}</div></div>
+  <div class="grp"><span class="l">Type</span><div class="seg">${segB('type', 'job', 'To-do')}${segB('type', 'item', 'Item to replace')}</div></div>
   <div class="grp"><label for="f-cat">Category</label><select id="f-cat" class="field" name="category">${cats().map(c => opt(c.id, c.name, e.category)).join('')}</select></div>
   <div class="grp"><span class="l">${e.type === 'item' ? 'Suggested life' : 'Repeat every'}</span><div class="inline"><input class="field" style="width:80px;text-align:center;font-weight:700" type="number" min="1" max="99" name="every" value="${esc(e.every)}" aria-label="Number" data-recalc><select class="field" name="unit" aria-label="Unit" data-recalc>${['days', 'weeks', 'months', 'years'].map(u => opt(u, u, e.unit)).join('')}</select></div></div>
   <div class="grp box" style="padding:8px 12px;gap:0"><span class="l" style="padding-top:4px">Next due is counted from</span>
@@ -317,7 +317,7 @@ function viewEdit(id, params) {
   <div class="grp"><label for="f-rw">Remind me</label><select id="f-rw" class="field" name="remindWhen">${opt('due', 'On the due day', e.remindWhen)}${opt('1d', '1 day before', e.remindWhen)}${opt('3d', '3 days before', e.remindWhen)}${opt('1w', '1 week before', e.remindWhen)}${opt('none', 'No reminder', e.remindWhen)}</select></div>
   <div class="inline"><div class="grp" style="flex:1"><label for="f-ra">If not done, remind again</label><select id="f-ra" class="field" name="remindAgain">${opt('never', 'Never', e.remindAgain)}${opt('daily', 'Daily', e.remindAgain)}${opt('2d', 'Every 2 days', e.remindAgain)}${opt('3d', 'Every 3 days', e.remindAgain)}${opt('weekly', 'Weekly', e.remindAgain)}</select></div>
   <div class="grp" style="width:120px"><label for="f-rt">At</label><input id="f-rt" class="field" type="time" step="3600" name="remindTime" value="${esc(e.remindTime || '18:00')}"></div></div>
-  <div class="grp"><span class="l">Whose job</span><div class="seg">${store.people.map(p => segB('assignee', p.key, p.name)).join('')}${segB('assignee', 'either', 'Either')}</div><span class="hint">Reminders go to that person. “Either” reminds you both.</span></div>
+  <div class="grp"><span class="l">Whose to-do</span><div class="seg">${store.people.map(p => segB('assignee', p.key, p.name)).join('')}${segB('assignee', 'either', 'Either')}</div><span class="hint">Reminders go to that person. “Either” reminds you both.</span></div>
   <label class="check"><input type="checkbox" name="important" ${e.important ? 'checked' : ''}> Important (star)</label>
   <div class="grp"><label for="f-notes">Notes</label><textarea id="f-notes" class="field" name="notes">${esc(e.notes || '')}</textarea></div>
   <button class="btn terra" type="submit">Save</button>
@@ -349,7 +349,7 @@ function viewSettings() {
   <div class="lab">Your data</div><div class="box">
     <button class="row" data-act="export"><span class="rt">Back up to a file</span><span class="end">.json</span></button>
     <label class="row"><span class="rt">Restore from a backup file</span><input type="file" accept=".json,application/json" data-change="import" style="display:none"></label>
-    ${!S.jobs.length ? `<button class="row" data-act="starter"><span class="rt" style="color:var(--terra-d);font-weight:700">Load my starter list (22 jobs)</span></button>` : ''}
+    ${!S.jobs.length ? `<button class="row" data-act="starter"><span class="rt" style="color:var(--terra-d);font-weight:700">Load my starter list (22 to-dos)</span></button>` : ''}
     ${DEMO ? `<button class="row" data-act="resetdemo"><span class="rt" style="color:var(--late-d)">Reset demo data</span></button>` : ''}
   </div>
   <div style="display:flex;align-items:center;gap:12px;justify-content:center;padding:24px 0;color:var(--muted);font-size:13px">${shieldSvg(36)}<div><b class="hd" style="color:var(--ink);font-size:16px">TaskForce</b><br>Version ${VERSION}</div></div>
@@ -357,7 +357,7 @@ function viewSettings() {
 }
 
 function viewLogin(err) {
-  return `<div class="login">${shieldSvg(88)}<div style="text-align:center"><div class="hd" style="font-size:30px">TaskForce</div><div class="sub">Home jobs, sorted.</div></div>
+  return `<div class="login">${shieldSvg(88)}<div style="text-align:center"><div class="hd" style="font-size:30px">TaskForce</div><div class="sub">Your home, sorted.</div></div>
   <form class="box" data-form="login"><div class="grp"><label for="l-e">Email</label><input id="l-e" class="field" type="email" name="email" autocomplete="username" required></div>
   <div class="grp"><label for="l-p">Password</label><input id="l-p" class="field" type="password" name="pw" autocomplete="current-password" required></div>
   ${err ? `<div class="err">${esc(err)}</div>` : ''}<button class="btn terra">Sign in</button></form></div>`;
@@ -404,7 +404,7 @@ function calEntries(from, to) {
     // Overdue: show it on today. Fixed schedules keep their future dates; "from when done" ones can't be known until it's done.
     if (late && t >= from && t <= to) out.push({ ...base, date: t, sub: `Overdue · was due ${L.shortDate(j.nextDue, t)}`, late: true });
     if (late && j.countFrom !== 'fixed') continue;
-    for (const d of L.jobDatesBetween(j, late ? L.addDays(t, 1) > from ? L.addDays(t, 1) : from : from, to)) out.push({ ...base, date: d, sub: isItem(j) ? 'Item · replace or still good' : 'Job · ' + L.repeatText(j) });
+    for (const d of L.jobDatesBetween(j, late ? L.addDays(t, 1) > from ? L.addDays(t, 1) : from : from, to)) out.push({ ...base, date: d, sub: isItem(j) ? 'Item · replace or still good' : 'To-do · ' + L.repeatText(j) });
   }
   for (const e of visibleEvents()) for (const o of L.eventOccurrences(e, from, to)) {
     for (let d = o.date < from ? from : o.date; d <= o.end && d <= to; d = L.addDays(d, 1)) {
@@ -429,7 +429,7 @@ function homeWeek(t) {
   return `<div class="lab">This week <button data-act="go" data-to="#/calendar">Calendar</button></div>
   <div class="box">${rows.slice(0, 6).map(e => entryRow({ ...e, sub: (e.date === t ? 'Today' : L.niceDate(e.date, t)) + ' · ' + e.sub })).join('')}
   ${rows.length ? '' : '<div class="row"><span class="rs" style="flex:1">No events, sessions or project tasks this week.</span></div>'}
-  ${chores ? `<button class="row" data-act="filter" data-f="week">${I.jobs.replace('<svg', '<svg class="ri"')}<span class="rt" style="flex:1">${chores} job${chores > 1 ? 's' : ''} due in the next 7 days</span><span class="end">${I.right.replace('<svg', '<svg width="16" height="16"')}</span></button>` : ''}</div>`;
+  ${chores ? `<button class="row" data-act="filter" data-f="week">${I.jobs.replace('<svg', '<svg class="ri"')}<span class="rt" style="flex:1">${chores} to-do${chores > 1 ? 's' : ''} due in the next 7 days</span><span class="end">${I.right.replace('<svg', '<svg width="16" height="16"')}</span></button>` : ''}</div>`;
 }
 function homeProjects(t) {
   const vp = visibleProjects(), act = vp.filter(p => p.status === 'active'), planned = vp.filter(p => p.status === 'planned');
@@ -485,7 +485,7 @@ function viewProjects() {
       (pl.length ? `<div class="lab">Planned · ${pl.length} <span>${hrs(pl.reduce((s, p) => s + (Number(p.estHours) || 0), 0))}</span></div><div class="list">${pl.map(card).join('')}</div>` : '');
   } else body = sets[f].length ? `<div class="list" style="margin-top:8px">${sets[f].map(card).join('')}</div>` : '';
   const seg = (key, l) => `<button class="${k === key ? 'on' : ''}" data-act="pkind" data-k="${key}">${l}</button>`;
-  return `<div class="wrap"><div class="top"><div><div class="sub">House jobs and hobbies</div><h1>Projects</h1></div></div>
+  return `<div class="wrap"><div class="top"><div><div class="sub">House projects and hobbies</div><h1>Projects</h1></div></div>
   <div class="seg" style="margin-bottom:10px">${seg('all', 'All')}${seg('house', 'House')}${seg('hobby', 'Hobbies')}</div>
   <div class="chips">${chip('active', 'Active')}${chip('idea', 'Ideas')}${chip('hold', 'On hold')}${chip('done', 'Done')}</div>
   ${body || `<div class="empty">${f === 'active' ? 'No projects yet. Tap + to add one, like “Pave behind the shed” or a video edit.' : 'Nothing here.'}</div>`}
@@ -565,7 +565,7 @@ function viewProjectEdit(id, params) {
   const segB = (f, v, l) => `<button type="button" class="${(e[f] || '') === v ? 'on' : ''}" data-act="pseg" data-f="${f}" data-v="${v}">${esc(l)}</button>`;
   return `<div class="wrap"><form data-form="project" data-id="${id || ''}" class="form" novalidate>
   <div class="fbar"><button type="button" data-act="back">Cancel</button><span class="hd" style="font-size:17px">${id ? 'Edit' : 'New'} project</span><button class="save" type="submit">Save</button></div>
-  <div class="seg">${segB('kind', 'house', 'House job')}${segB('kind', 'hobby', 'Hobby')}</div>
+  <div class="seg">${segB('kind', 'house', 'House')}${segB('kind', 'hobby', 'Hobby')}</div>
   <div class="grp"><label for="p-name">Name</label><input id="p-name" class="field" name="name" value="${esc(e.name)}" maxlength="80" placeholder="${hob ? 'e.g. Philippines 2025 video' : 'e.g. Pave behind the shed'}"><div class="err" id="pname-err" hidden>Give it a name first</div></div>
   ${hob ? `<div class="grp"><label for="p-hob">Hobby</label><div class="inline"><select id="p-hob" class="field" name="hobby" style="flex:1">${hobbies().map(h => opt(h.id, h.name, e.hobby)).join('')}${e.hobby && !hobbies().some(h => h.id === e.hobby) ? opt(e.hobby, 'Other hobby', e.hobby) : ''}</select><button type="button" class="chip" data-act="newhobby" data-inform="1">+ New</button></div></div>
   <label class="check"><input type="checkbox" name="ongoing" data-change="pongoing" ${e.ongoing ? 'checked' : ''}> Ongoing: no finish line or estimate</label>`
@@ -608,7 +608,7 @@ function viewCalendar() {
   <div class="top"><h1>${esc(title)}</h1><div style="display:flex;gap:6px"><button class="iconbtn" data-act="cmonth" data-n="-1" aria-label="Previous month">${I.left}</button><button class="chip" data-act="ctoday">Today</button><button class="iconbtn" data-act="cmonth" data-n="1" aria-label="Next month">${I.right}</button></div></div>
   <div class="seg" style="margin-bottom:10px"><button class="${c.view !== 'agenda' ? 'on' : ''}" data-act="cview" data-v="month">Month</button><button class="${c.view === 'agenda' ? 'on' : ''}" data-act="cview" data-v="agenda">Agenda</button></div>
   ${c.view !== 'agenda' ? `<div class="cal">${['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(d => `<div class="cdow">${d}</div>`).join('')}${grid}</div>
-  <div class="legend" style="margin:8px 4px;flex-wrap:wrap"><span><i class="lg" style="background:#C8553D"></i>Jobs</span><span><i class="lg" style="background:#6B8F47"></i>Items</span><span><i class="lg" style="background:#3D5A6C"></i>Events</span><span><i class="lg" style="background:#E9C46A"></i>Projects</span><span><i class="lg" style="background:#A0703C"></i>Get ready</span><span><i class="lg" style="background:var(--slate-l);width:14px;border-radius:3px"></i>Away</span></div>` : ''}
+  <div class="legend" style="margin:8px 4px;flex-wrap:wrap"><span><i class="lg" style="background:#C8553D"></i>To Do</span><span><i class="lg" style="background:#6B8F47"></i>Items</span><span><i class="lg" style="background:#3D5A6C"></i>Events</span><span><i class="lg" style="background:#E9C46A"></i>Projects</span><span><i class="lg" style="background:#A0703C"></i>Get ready</span><span><i class="lg" style="background:var(--slate-l);width:14px;border-radius:3px"></i>Away</span></div>` : ''}
   ${lower}
   </div>${nav()}<button class="fab" data-act="go" data-to="#/event/new?date=${c.sel}" aria-label="Add event" style="width:auto;padding:0 18px;gap:6px;font-weight:700">${I.plus}Event</button>`;
 }
@@ -728,7 +728,7 @@ function sheetHtml() {
   }
   if (sh.type === 'confirm') {
     return `<div class="scrim" data-act="closesheet"><div class="sheet" role="dialog" aria-label="Confirm" data-stop>
-    <div class="grab"></div><h2>Delete “${esc(j?.name || '')}”?</h2><div class="hint" style="font-size:14px">This removes the job and its history for both of you.</div>
+    <div class="grab"></div><h2>Delete “${esc(j?.name || '')}”?</h2><div class="hint" style="font-size:14px">This removes the to-do and its history for both of you.</div>
     <div class="btns"><button class="btn alt" data-act="closesheet">Keep it</button><button class="btn" style="background:var(--late-d)" data-act="dodelete">Delete</button></div></div></div>`;
   }
   return '';
@@ -937,7 +937,7 @@ document.addEventListener('click', async ev => {
     case 'evrange': syncEvForm(); S.edEv.range = el.dataset.v === '1'; if (S.edEv.range && (!S.edEv.endDate || S.edEv.endDate < S.edEv.date)) S.edEv.endDate = S.edEv.date; rerender(); break;
     case 'evvis': syncEvForm(); S.edEv.visibility = el.dataset.v; rerender(); break;
     case 'evdelete': if (confirm('Delete this event?')) { await store.deleteDoc('events', id); S.edEv = null; location.replace('#/calendar'); toast('Event deleted', ''); } break;
-    case 'starter': await store.loadStarter(); toast('Starter list loaded', '22 jobs added'); break;
+    case 'starter': await store.loadStarter(); toast('Starter list loaded', '22 to-dos added'); break;
     case 'resetdemo': await store.resetDemo(); toast('Demo reset', ''); break;
   }
 });
