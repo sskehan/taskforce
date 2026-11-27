@@ -1,5 +1,5 @@
-import * as L from './logic.js';
-import { createStore, DEMO } from './store.js';
+import * as L from './logic.js?v=1.041';
+import { createStore, DEMO } from './store.js?v=1.041';
 import { DEFAULT_CATEGORIES } from './seed.js';
 
 export const VERSION = '1.04';
@@ -671,6 +671,18 @@ function render() {
   const { parts, params } = route();
   const v = parts[0] || 'home';
   let html;
+  try { html = buildView(v, parts, params); } catch (e) {
+    console.error(e);
+    $app.innerHTML = `<div class="login">${shieldSvg(72)}<div class="err" style="text-align:center">Something went wrong loading this screen.<br><small>${esc(e.message || e)}</small></div><button class="btn terra" style="max-width:240px" onclick="location.reload()">Refresh</button><button class="btn ghost" style="max-width:240px" onclick="location.hash='#/home'">Go home</button></div>`;
+    return;
+  }
+  const y = S.keepScroll ? window.scrollY : 0;
+  $app.innerHTML = html + sheetHtml();
+  if (S.keepScroll) window.scrollTo(0, y); S.keepScroll = false;
+  afterRender(v, parts, params);
+}
+function buildView(v, parts, params) {
+  let html;
   if (v !== 'edit' && v !== 'new') S.editing = null;
   if (v !== 'pedit' && v !== 'pnew') S.edProj = null;
   if (v !== 'event') S.edEv = null;
@@ -688,9 +700,9 @@ function render() {
   else if (v === 'calendar') html = viewCalendar();
   else if (v === 'event') html = viewEventEdit(parts[1] && parts[1] !== 'new' ? parts[1] : null, params);
   else html = viewHome();
-  const y = S.keepScroll ? window.scrollY : 0;
-  $app.innerHTML = html + sheetHtml();
-  if (S.keepScroll) window.scrollTo(0, y); S.keepScroll = false;
+  return html;
+}
+function afterRender(v, parts, params) {
   if (v === 'job' && params.get('do') && S.loaded) {
     const act = params.get('do'); history.replaceState(null, '', '#/job/' + parts[1]);
     const j = findJob(parts[1]);

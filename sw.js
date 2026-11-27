@@ -1,6 +1,6 @@
 // TaskForce service worker: offline cache + push reminders.
-const CACHE = 'taskforce-1.04';
-const SHELL = ['./', './index.html', './styles.css?v=1.04', './app.js?v=1.04', './logic.js', './store.js', './seed.js', './firebase-config.js', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/badge-96.png'];
+const CACHE = 'taskforce-1.041';
+const SHELL = ['./', './index.html', './styles.css?v=1.041', './app.js?v=1.041', './logic.js?v=1.041', './store.js?v=1.041', './seed.js', './firebase-config.js', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/badge-96.png'];
 
 self.addEventListener('install', e => {
   // Cache each file on its own, so one missing file can't stop the app installing.
@@ -13,7 +13,9 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
-  e.respondWith(fetch(req).then(res => {
+  // Skip the browser's HTTP cache so a new upload is picked up straight away.
+  const fresh = req.mode === 'navigate' ? req : new Request(req.url, { cache: 'no-cache', credentials: 'same-origin' });
+  e.respondWith(fetch(fresh).then(res => {
     if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
     return res;
   }).catch(() => caches.match(req, { ignoreSearch: req.mode === 'navigate' }).then(r => r || caches.match('./index.html'))));
