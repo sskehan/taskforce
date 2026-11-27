@@ -1,8 +1,8 @@
-import * as L from './logic.js?v=1.06';
-import { createStore, DEMO } from './store.js?v=1.06';
+import * as L from './logic.js?v=1.07';
+import { createStore, DEMO } from './store.js?v=1.07';
 import { DEFAULT_CATEGORIES } from './seed.js';
 
-export const VERSION = '1.06';
+export const VERSION = '1.07';
 const store = createStore();
 const S = { me: null, jobs: [], history: [], projects: [], events: [], cal: null, edProj: null, edEv: null, settings: { categories: DEFAULT_CATEGORIES, defaultTime: '18:00' }, filter: 'all', search: null, loaded: false, sheet: null, pending: null, editing: null };
 const $app = document.getElementById('app');
@@ -340,10 +340,10 @@ function viewSettings() {
     <label class="row"><span class="rt" style="flex:1">Default reminder time</span><input class="field" style="width:120px" type="time" step="3600" value="${esc(S.settings.defaultTime || '18:00')}" data-change="deftime"></label>
   </div>
   <div class="lab">Hobbies <span>for hobby projects</span></div>
-  <div class="box">${hobbies().map((h, i) => `<div class="row"><span class="badge sm c-${h.color}">${I[h.icon] || I.film}</span><span class="rt" style="flex:1">${esc(h.name)}</span><span class="end">${S.projects.filter(p => p.hobby === h.id).length}</span>${S.projects.some(p => p.hobby === h.id) ? '' : `<button class="x iconbtn" style="box-shadow:none;background:none;width:36px;height:36px" data-act="delhobby" data-i="${i}" aria-label="Remove ${esc(h.name)}">×</button>`}</div>`).join('')}
+  <div class="box">${hobbies().map((h, i) => `<div class="row"><button class="grpbtn" data-act="editgrp" data-g="hob" data-i="${i}" aria-label="Edit ${esc(h.name)}"><span class="badge sm c-${h.color}">${I[h.icon] || I.film}</span><span class="rt">${esc(h.name)}</span>${I.edit.replace('<svg', '<svg class="pen"')}</button><span class="end">${S.projects.filter(p => p.hobby === h.id).length}</span>${S.projects.some(p => p.hobby === h.id) ? '' : `<button class="x iconbtn" style="box-shadow:none;background:none;width:36px;height:36px" data-act="delhobby" data-i="${i}" aria-label="Remove ${esc(h.name)}">×</button>`}</div>`).join('')}
     <button class="row" data-act="newhobby"><span class="rt" style="color:var(--terra-d);font-weight:700">+ New hobby</span></button></div>
   <div class="lab">Categories</div><div class="box">
-    ${cats().map((c, i) => `<div class="row"><span class="badge sm c-${c.color}">${I[c.icon] || I.tag}</span><span class="rt" style="flex:1">${esc(c.name)}</span><span class="end">${S.jobs.filter(j => j.category === c.id).length}</span>${S.jobs.some(j => j.category === c.id) ? '' : `<button class="x iconbtn" style="box-shadow:none;background:none;width:36px;height:36px" data-act="delcat" data-i="${i}" aria-label="Remove ${esc(c.name)}">×</button>`}</div>`).join('')}
+    ${cats().map((c, i) => `<div class="row"><button class="grpbtn" data-act="editgrp" data-g="cat" data-i="${i}" aria-label="Edit ${esc(c.name)}"><span class="badge sm c-${c.color}">${I[c.icon] || I.tag}</span><span class="rt">${esc(c.name)}</span>${I.edit.replace('<svg', '<svg class="pen"')}</button><span class="end">${catUse(c.id)}</span>${catUse(c.id) ? '' : `<button class="x iconbtn" style="box-shadow:none;background:none;width:36px;height:36px" data-act="delcat" data-i="${i}" aria-label="Remove ${esc(c.name)}">×</button>`}</div>`).join('')}
     <form class="addstep" data-form="cat" style="flex-wrap:wrap"><input name="name" placeholder="New category" maxlength="20" aria-label="New category name" style="flex-basis:100%"><select name="color" class="field" style="width:auto;min-height:42px" aria-label="Colour">${COLORS.map(c => `<option value="${c}">${COLOR_NAMES[c]}</option>`).join('')}</select><select name="icon" class="field" style="width:auto;min-height:42px" aria-label="Icon">${ICONS.map(c => `<option value="${c}">${c}</option>`).join('')}</select><button class="iconbtn" aria-label="Add category" style="box-shadow:none;background:var(--soft)">${I.plus}</button></form>
   </div>
   <div class="lab">Your data</div><div class="box">
@@ -393,6 +393,7 @@ const canSee = x => x.visibility !== 'private' || !x.owner || x.owner === S.me?.
 const visibleProjects = () => S.projects.filter(canSee);
 const loggedSince = (p, from) => (p.timeLog || []).filter(x => x.date >= from).reduce((a, x) => a + (Number(x.hours) || 0), 0);
 const hobbyHours = (hid, from) => visibleProjects().filter(p => isHobby(p) && p.hobby === hid).reduce((a, p) => a + loggedSince(p, from), 0);
+const catUse = id => S.jobs.filter(j => j.category === id).length + S.projects.filter(p => !isHobby(p) && p.category === id).length;
 const whoTxt = k => !k || k === 'either' ? 'Either' : person(k).name;
 
 // Everything that lands on each day between from and to.
@@ -683,6 +684,15 @@ function sheetHtml() {
     <div class="preview">${h > 0 ? `<b>${esc(L.hoursText(h))}</b> on ${esc(L.niceDate(sh.date, t))}. Shows on the Calendar for both of you.` : 'End time needs to be after the start.'}${free.length ? ` Heads up: ${esc(free.map(k => person(k).name).join(' & '))} marked away that day.` : ''}</div>
     <div class="btns"><button class="btn alt" data-act="closesheet">Cancel</button><button class="btn terra" style="flex:2" data-act="dosession" ${h > 0 ? '' : 'disabled'}>Book it</button></div></div></div>`;
   }
+  if (sh.type === 'grp') {
+    const isCat = sh.g === 'cat', used = isCat ? catUse(sh.id) : S.projects.filter(p => p.hobby === sh.id).length;
+    return `<div class="scrim" data-act="closesheet"><div class="sheet" role="dialog" aria-label="Edit ${isCat ? 'category' : 'hobby'}" data-stop>
+    <div class="grab"></div><div style="display:flex;align-items:center;gap:12px"><span class="badge c-${sh.color}">${I[sh.icon] || I.tag}</span><div><h2>Edit ${isCat ? 'category' : 'hobby'}</h2><div class="hint" style="margin-top:2px;font-size:13px">${used ? `Used by ${used} ${isCat ? 'to-do' + (used > 1 ? 's' : '') + '/project' + (used > 1 ? 's' : '') : 'project' + (used > 1 ? 's' : '')}. They all update.` : 'Not used yet.'}</div></div></div>
+    <div class="grp"><label for="gr-n">Name</label><input id="gr-n" class="field" value="${esc(sh.name)}" maxlength="24"></div>
+    <div class="grp"><span class="l">Colour</span><div class="swatches">${COLORS.map(c => `<button type="button" class="sw c-${c} ${sh.color === c ? 'on' : ''}" data-act="grpcol" data-v="${c}" aria-label="${COLOR_NAMES[c]}"><i style="background:${HEX[c]}"></i></button>`).join('')}</div></div>
+    <div class="grp"><span class="l">Icon</span><div class="swatches">${ICONS.map(ic => `<button type="button" class="sw ${sh.icon === ic ? 'on' : ''}" data-act="grpicon" data-v="${ic}" aria-label="${ic}">${I[ic] || I.tag}</button>`).join('')}</div></div>
+    <div class="btns"><button class="btn alt" data-act="closesheet">Cancel</button><button class="btn terra" style="flex:2" data-act="dogrp">Save</button></div></div></div>`;
+  }
   if (sh.type === 'task') {
     const p = findProj(sh.id); if (!p) return '';
     const wb = (v, l) => `<button type="button" class="${sh.who === v ? 'on' : ''}" data-act="taskwho" data-v="${v}">${esc(l)}</button>`;
@@ -900,6 +910,15 @@ document.addEventListener('click', async ev => {
       if (el.dataset.inform) { S.edProj.hobby = hid; rerender(); } else toast('Hobby added', n);
       break;
     }
+    case 'editgrp': { const list = el.dataset.g === 'cat' ? cats() : hobbies(), x = list[+el.dataset.i]; if (!x) break;
+      S.sheet = { type: 'grp', g: el.dataset.g, i: +el.dataset.i, id: x.id, name: x.name, color: x.color || 'ink', icon: x.icon || 'tag' }; rerender(); break; }
+    case 'grpcol': S.sheet.name = document.getElementById('gr-n')?.value ?? S.sheet.name; S.sheet.color = el.dataset.v; rerender(); break;
+    case 'grpicon': S.sheet.name = document.getElementById('gr-n')?.value ?? S.sheet.name; S.sheet.icon = el.dataset.v; rerender(); break;
+    case 'dogrp': { const sh = S.sheet, name = String(document.getElementById('gr-n')?.value || '').trim(); if (!name) { toast('Give it a name', ''); break; }
+      const isCat = sh.g === 'cat', list = clone(isCat ? cats() : hobbies());
+      if (list.some((x, k) => k !== sh.i && x.name.toLowerCase() === name.toLowerCase())) { toast('That name is already used', ''); break; }
+      list[sh.i] = { ...list[sh.i], name, color: sh.color, icon: sh.icon }; // id stays the same, so everything using it updates
+      S.sheet = null; await store.saveSettings(isCat ? { categories: list } : { hobbies: list }); rerender(); toast('Saved', name); break; }
     case 'delhobby': { const hs = clone(hobbies()); hs.splice(+el.dataset.i, 1); await store.saveSettings({ hobbies: hs }); break; }
     case 'ptask': { const p = findProj(id); const x = p?.steps?.[+el.dataset.i]; if (!x) break; S.sheet = { type: 'task', id, i: +el.dataset.i, text: x.text, hours: x.hours || '', due: x.due || '', who: x.who || 'either', note: x.note || '' }; rerender(); break; }
     case 'taskwho': S.sheet.who = el.dataset.v; syncTaskSheet(); rerender(); break;
