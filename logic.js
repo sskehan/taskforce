@@ -279,3 +279,7 @@ export function jobDatesBetween(job, from, to, cap = 60) {
   while (d <= to && k++ < cap) { if (d >= from) out.push(d); d = addInterval(d, job.every, job.unit); }
   return out;
 }
+// Project tasks with a due date that haven't been ticked off (v1.05).
+export function tasksDue(p, now, defHour = 18) {
+  return (p.steps || []).filter(x => !x.done && !x.notified && x.due && (now.date > x.due || (now.date === x.due && now.hour >= defHour)));
+}

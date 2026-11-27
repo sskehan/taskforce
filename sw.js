@@ -1,6 +1,6 @@
 // TaskForce service worker: offline cache + push reminders.
-const CACHE = 'taskforce-1.041';
-const SHELL = ['./', './index.html', './styles.css?v=1.041', './app.js?v=1.041', './logic.js?v=1.041', './store.js?v=1.041', './seed.js', './firebase-config.js', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/badge-96.png'];
+const CACHE = 'taskforce-1.05';
+const SHELL = ['./', './index.html', './styles.css?v=1.05', './app.js?v=1.05', './logic.js?v=1.05', './store.js?v=1.05', './seed.js', './firebase-config.js', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/badge-96.png'];
 
 self.addEventListener('install', e => {
   // Cache each file on its own, so one missing file can't stop the app installing.
