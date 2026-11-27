@@ -2,9 +2,9 @@ import * as L from './logic.js';
 import { createStore, DEMO } from './store.js';
 import { DEFAULT_CATEGORIES } from './seed.js';
 
-export const VERSION = '1.03';
+export const VERSION = '1.04';
 const store = createStore();
-const S = { me: null, jobs: [], history: [], settings: { categories: DEFAULT_CATEGORIES, defaultTime: '18:00' }, filter: 'all', search: null, loaded: false, sheet: null, pending: null, editing: null };
+const S = { me: null, jobs: [], history: [], projects: [], events: [], cal: null, edProj: null, edEv: null, settings: { categories: DEFAULT_CATEGORIES, defaultTime: '18:00' }, filter: 'all', search: null, loaded: false, sheet: null, pending: null, editing: null };
 const $app = document.getElementById('app');
 
 // ---------- icons ----------
@@ -37,11 +37,19 @@ const I = {
   skip: sv('<path d="M5 5l7 7-7 7M13 5l7 7-7 7"/>', 2.4),
   ext: sv('<path d="M12 5v14M5 12h14"/>', 2.6),
   miss: sv('<circle cx="12" cy="12" r="8"/><path d="M9 9l6 6M15 9l-6 6"/>', 2.4),
+  proj: sv('<path d="M3 21h18"/><path d="M5 21V9l7-5 7 5v12"/><path d="M9 21v-6h6v6"/>'),
+  tool: sv('<path d="M14 7l3-3 3 3-3 3"/><path d="M17 7L5 19"/>'),
+  film: sv('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 5v14M17 5v14M3 9h4M17 9h4M3 15h4M17 15h4"/>'),
+  plane: sv('<path d="M2 16l20-8-6 12-3-5z"/><path d="M13 15l-3 5"/>'),
+  event: sv('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M8 15h3"/>', 2),
+  dollar: sv('<path d="M12 3v18M17 7H9.5a2.5 2.5 0 0 0 0 5h5a2.5 2.5 0 0 1 0 5H7"/>', 2),
+  timer: sv('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/>', 2),
+  left: sv('<path d="M15 18l-6-6 6-6"/>', 2.4), right: sv('<path d="M9 6l6 6-6 6"/>', 2.4),
   gear: sv('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>', 2)
 };
 const COLORS = ['terra', 'slate', 'wattle', 'gum', 'ochre', 'ink'];
 const COLOR_NAMES = { terra: 'Terracotta', slate: 'Slate', wattle: 'Wattle', gum: 'Gum leaf', ochre: 'Ochre', ink: 'Navy' };
-const ICONS = ['house', 'car', 'paw', 'mask', 'battery', 'tag'];
+const ICONS = ['house', 'car', 'paw', 'mask', 'battery', 'tag', 'tool', 'film', 'plane'];
 
 export function shieldSvg(size = 40) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="24" fill="#FBF6EC"/><clipPath id="sh${size}"><path d="M50 12l34 12v28c0 20-16 32-34 38c-18-6-34-18-34-38V24z"/></clipPath><g clip-path="url(#sh${size})"><rect x="10" y="8" width="40" height="44" fill="#C8553D"/><rect x="50" y="8" width="40" height="44" fill="#6B8F47"/><rect x="10" y="52" width="40" height="44" fill="#E9C46A"/><rect x="50" y="52" width="40" height="44" fill="#3D5A6C"/></g><circle cx="50" cy="50" r="17" fill="#FBF6EC"/><path d="M42 51l6 6 11-12" fill="none" stroke="#2D2A26" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -95,8 +103,9 @@ function ring(pct, size, color, track, label, sub) {
   <text x="50%" y="${sub ? '50%' : '55%'}" text-anchor="middle" font-family="Bricolage Grotesque,sans-serif" font-weight="800" font-size="${size * 0.24}" fill="currentColor">${esc(label)}</text>
   ${sub ? `<text x="50%" y="${size * 0.68}" text-anchor="middle" font-family="DM Sans,sans-serif" font-weight="700" font-size="${size * 0.1}" fill="currentColor" opacity=".8">${esc(sub)}</text>` : ''}</svg>`;
 }
-const navBtn = (r, icon, label) => `<button class="${(location.hash || '#/home').startsWith('#/' + r) ? 'on' : ''}" data-act="go" data-to="#/${r}">${I[icon]}${label}</button>`;
-const nav = () => `<nav class="nav" aria-label="Main">${navBtn('home', 'home', 'Home')}${navBtn('jobs', 'jobs', 'Jobs')}${navBtn('items', 'items', 'Items')}${navBtn('history', 'clock', 'History')}</nav>`;
+const NAV = [['home', 'home', 'Home', ['home', 'settings']], ['jobs', 'jobs', 'Jobs', ['jobs', 'items', 'history', 'job', 'edit', 'new']], ['projects', 'proj', 'Projects', ['projects', 'project', 'pedit', 'pnew']], ['calendar', 'cal', 'Calendar', ['calendar', 'event']]];
+const nav = () => { const v = route().parts[0] || 'home'; return `<nav class="nav" aria-label="Main">${NAV.map(([r, icon, label, owns]) => `<button class="${owns.includes(v) ? 'on' : ''}" data-act="go" data-to="#/${r}">${I[icon]}${label}</button>`).join('')}</nav>`; };
+const jobsSeg = cur => `<div class="seg" style="margin:0 0 10px" role="tablist">${[['jobs', 'Jobs', S.jobs.length], ['items', 'Items', S.jobs.filter(isItem).length], ['history', 'History', '']].map(([k, l, n]) => `<button class="${cur === k ? 'on' : ''}" role="tab" aria-selected="${cur === k}" data-act="go" data-to="#/${k}">${l}${n !== '' ? ' ' + n : ''}</button>`).join('')}</div>`;
 const avatars = () => `<button class="avs" data-act="go" data-to="#/settings" aria-label="Settings" style="border:0;background:none;padding:0">${store.people.map(p => `<span class="av ${p.key}">${esc(p.name[0])}</span>`).join('')}</button>`;
 function greeting() {
   const h = L.nowIn().hour;
@@ -128,9 +137,8 @@ function viewHome() {
   </div>
   ${overdue.length ? `<div class="lab">Quick wins <button data-act="filter" data-f="overdue">All overdue</button></div>
   <div class="list">${overdue.slice(0, 3).map(j => jobCard(j, t)).join('')}</div>` : ''}
-  <div class="lab">Coming up</div>
-  ${coming.length ? `<div class="ups">${coming.map(j => `<button class="up" data-act="open" data-id="${j.id}">
-    <span class="d" style="${L.daysUntil(j, t) === 0 ? 'color:var(--terra-d)' : ''}">${L.daysUntil(j, t) === 0 ? 'Due today' : esc(L.niceDate(j.nextDue, t))}</span>${badge(j, true)}<span class="n">${esc(j.name)}</span></button>`).join('')}</div>` : `<div class="empty">Nothing coming up.</div>`}
+  ${homeWeek(t)}
+  ${homeProjects(t)}
   ${itemCats.map(c => {
     const its = jobs.filter(j => isItem(j) && j.category === c);
     const o = its.filter(j => L.isOverdue(j, t)).length, sn = its.filter(j => !L.isOverdue(j, t) && L.daysUntil(j, t) <= 7).length, f = its.length - o - sn;
@@ -161,6 +169,7 @@ function viewJobs() {
   const bucketChip = ['overdue', 'week', 'month', 'later'].includes(S.filter) ? chip(S.filter, { overdue: 'Overdue', week: 'Next 7 days', month: 'Next 30 days', later: 'Later' }[S.filter]) : '';
   return `<div class="wrap">
   <div class="top"><h1>Jobs</h1><button class="iconbtn" data-act="search" aria-label="Search">${I.search}</button></div>
+  ${jobsSeg('jobs')}
   ${S.search !== null ? `<div style="margin-bottom:8px"><input class="field" id="q" placeholder="Search jobs" value="${esc(S.search)}" aria-label="Search jobs" autofocus></div>` : ''}
   <div class="chips">${bucketChip}${chip('all', 'All', S.jobs.length)}${chip('myday', 'My Day', S.jobs.filter(inMyDay).length)}${chip('important', '★ Important', S.jobs.filter(j => j.important).length)}${chip('mine', 'Mine', S.jobs.filter(j => j.assignee === S.me.key).length)}
   ${cats().map(c => chip('cat:' + c.id, c.name, S.jobs.filter(j => j.category === c.id).length)).join('')}</div>
@@ -176,7 +185,8 @@ function viewItems() {
   const t = T(), items = S.jobs.filter(isItem).sort(byDue);
   const cs = [...new Set(items.map(j => j.category))];
   return `<div class="wrap">
-  <div class="top"><div><div class="sub">Things that wear out</div><h1>Items</h1></div></div>
+  <div class="top"><div><div class="sub">Things that wear out</div><h1>Jobs</h1></div></div>
+  ${jobsSeg('items')}
   ${cs.map(c => `<div class="lab">${esc(cat(c).name)} · ${items.filter(j => j.category === c).length}</div><div class="list">${items.filter(j => j.category === c).map(j => {
     const used = j.lastDone ? L.daysBetween(j.lastDone, t) : 0, life = j.lastDone && j.nextDue ? Math.max(1, L.daysBetween(j.lastDone, j.nextDue)) : intervalDays(j);
     const pct = Math.min(1, used / life), n = L.daysUntil(j, t);
@@ -213,7 +223,8 @@ function viewHistory() {
   const groups = {};
   for (const h of S.history) (groups[h.date] = groups[h.date] || []).push(h);
   const t = T();
-  return `<div class="wrap"><div class="top"><div><div class="sub">Who did what</div><h1>History</h1></div></div>
+  return `<div class="wrap"><div class="top"><div><div class="sub">Who did what</div><h1>Jobs</h1></div></div>
+  ${jobsSeg('history')}
   ${Object.keys(groups).sort().reverse().slice(0, 60).map(d => `<div class="lab">${d === t ? 'Today' : esc(L.niceDate(d, t))}</div><div class="box">${groups[d].map(h => histRow(h, true)).join('')}</div>`).join('') || '<div class="empty">Nothing yet. Ticks, skips and extensions show up here.</div>'}
   </div>${nav()}`;
 }
@@ -324,6 +335,8 @@ function viewSettings() {
   </div>
   <div class="lab">Reminders</div><div class="box">
     <div class="row">${I.bell.replace('<svg', '<svg class="ri"')}<div style="flex:1"><div class="rt">Push reminders</div><div class="rs" id="pushst">${esc(pushTxt)}</div></div><button class="btn" style="flex:none;min-height:40px;font-size:13px" data-act="push">${ps === 'granted' ? 'Refresh' : 'Turn on'}</button></div>
+    <label class="row"><span class="rt" style="flex:1">Project day (hours)</span><input class="field" style="width:80px;text-align:center" type="number" min="1" max="24" step="0.5" value="${perDay()}" data-change="perday"></label>
+    <label class="row"><span class="rt" style="flex:1">Project week (days)</span><input class="field" style="width:80px;text-align:center" type="number" min="1" max="7" value="${perWeek()}" data-change="perweek"></label>
     <label class="row"><span class="rt" style="flex:1">Default reminder time</span><input class="field" style="width:120px" type="time" step="3600" value="${esc(S.settings.defaultTime || '18:00')}" data-change="deftime"></label>
   </div>
   <div class="lab">Categories</div><div class="box">
@@ -347,10 +360,274 @@ function viewLogin(err) {
   ${err ? `<div class="err">${esc(err)}</div>` : ''}<button class="btn terra">Sign in</button></form></div>`;
 }
 
+// ---------- projects & calendar (v1.04) ----------
+const PSTATUS = { idea: 'Idea', planned: 'Planned', active: 'In progress', hold: 'On hold', done: 'Done' };
+const perDay = () => Number(S.settings.hoursPerDay) || 6;
+const perWeek = () => Number(S.settings.daysPerWeek) || 5;
+const hrs = (h, p) => L.hoursText(h, (p && p.unitPref) || 'hours', perDay(), perWeek());
+const hrsBoth = (h, p) => { const u = (p && p.unitPref) || 'hours'; return u === 'hours' ? `${L.hoursText(h)}` : `${L.hoursText(h)} · ${hrs(h, p)}`; };
+const findProj = id => S.projects.find(p => p.id === id);
+const findEv = id => S.events.find(e => e.id === id);
+const pLogged = p => (p.timeLog || []).reduce((a, x) => a + (Number(x.hours) || 0), 0);
+const pBooked = p => (p.sessions || []).reduce((a, x) => a + (Number(x.hours) || 0), 0);
+const pSpent = p => (p.materials || []).reduce((a, x) => a + (Number(x.cost) || 0), 0);
+const pStepsEst = p => (p.steps || []).reduce((a, x) => a + (Number(x.hours) || 0), 0);
+const pNext = p => (p.sessions || []).filter(x => x.date >= T()).sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start))[0];
+const money = n => n || n === 0 ? '$' + Number(n).toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : '';
+const time12 = t => { if (!t) return ''; let [h, m] = t.split(':').map(Number); const ap = h >= 12 ? 'pm' : 'am'; h = h % 12 || 12; return `${h}:${String(m).padStart(2, '0')} ${ap}`; };
+const visibleEvents = () => S.events.filter(e => e.visibility !== 'private' || e.owner === S.me?.key);
+const evTypes = () => S.settings.eventTypes && S.settings.eventTypes.length ? S.settings.eventTypes : ['Holiday', 'Leave', 'Hobby', 'Appointment'];
+const evIcon = e => ({ Holiday: 'plane', Leave: 'plane', Hobby: 'film', Appointment: 'event' }[e.type] || 'event');
+const pBadge = (p, sm) => { const c = cat(p.category); return `<span class="badge ${sm ? 'sm' : ''} c-${c.color}">${I[c.icon] || I.tool}</span>`; };
+
+// Everything that lands on each day between from and to.
+function calEntries(from, to) {
+  const t = T(), out = [];
+  for (const j of S.jobs) {
+    const base = { kind: isItem(j) ? 'item' : 'job', title: j.name, color: isItem(j) ? '#6B8F47' : '#C8553D', icon: cat(j.category).icon, cls: 'c-' + cat(j.category).color, go: '#/job/' + j.id, sort: '99' };
+    const late = j.nextDue && j.nextDue < t;
+    // Overdue: show it on today. Fixed schedules keep their future dates; "from when done" ones can't be known until it's done.
+    if (late && t >= from && t <= to) out.push({ ...base, date: t, sub: `Overdue · was due ${L.shortDate(j.nextDue, t)}`, late: true });
+    if (late && j.countFrom !== 'fixed') continue;
+    for (const d of L.jobDatesBetween(j, late ? L.addDays(t, 1) > from ? L.addDays(t, 1) : from : from, to)) out.push({ ...base, date: d, sub: isItem(j) ? 'Item · replace or still good' : 'Job · ' + L.repeatText(j) });
+  }
+  for (const e of visibleEvents()) for (const o of L.eventOccurrences(e, from, to)) {
+    for (let d = o.date < from ? from : o.date; d <= o.end && d <= to; d = L.addDays(d, 1)) {
+      const multi = o.end > o.date;
+      out.push({ date: d, kind: 'event', title: e.title, sub: `${e.type || 'Event'} · ${multi ? L.shortDate(o.date, t) + ' – ' + L.shortDate(o.end, t) : (e.allDay === false && e.start ? time12(e.start) + (e.end ? ' – ' + time12(e.end) : '') : 'All day')}${e.visibility === 'private' ? ' · just me' : ''}${e.away ? ' · away' : ''}`, color: '#3D5A6C', icon: evIcon(e), cls: 'c-slate', go: '#/event/' + e.id, sort: e.allDay === false && e.start ? e.start : '00', away: !!e.away });
+    }
+  }
+  for (const p of S.projects) {
+    for (const x of p.sessions || []) if (x.date >= from && x.date <= to) out.push({ date: x.date, kind: 'session', title: p.name, sub: `Project session · ${time12(x.start)} – ${time12(x.end)} (${L.hoursText(x.hours)})${x.note ? ' · ' + x.note : ''}`, color: '#E9C46A', icon: cat(p.category).icon || 'tool', cls: 'c-wattle', go: '#/project/' + p.id, sort: x.start || '00' });
+    for (const x of p.prep || []) if (!x.done && x.date >= from && x.date <= to) out.push({ date: x.date, kind: 'prep', title: x.text, sub: 'Get ready · ' + p.name, color: '#A0703C', icon: 'bell', cls: 'c-ochre', go: '#/project/' + p.id, sort: '98' });
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date) || a.sort.localeCompare(b.sort));
+}
+const entryRow = e => `<button class="row" data-act="go" data-to="${e.go}"><span class="badge sm ${e.cls}">${I[e.icon] || I.event}</span><div style="flex:1;min-width:0"><div class="rt" style="font-weight:700;font-size:14px">${esc(e.title)}</div><div class="rs">${esc(e.sub)}</div></div></button>`;
+
+function homeWeek(t) {
+  const end = L.addDays(t, 6), all = calEntries(t, end);
+  const rows = all.filter(e => e.kind !== 'job' && e.kind !== 'item');
+  const chores = L.summary(S.jobs, t).week; // same count as the "7 days" tile
+  return `<div class="lab">This week <button data-act="go" data-to="#/calendar">Calendar</button></div>
+  <div class="box">${rows.slice(0, 6).map(e => entryRow({ ...e, sub: (e.date === t ? 'Today' : L.niceDate(e.date, t)) + ' · ' + e.sub })).join('')}
+  ${rows.length ? '' : '<div class="row"><span class="rs" style="flex:1">No events or project sessions booked this week.</span></div>'}
+  ${chores ? `<button class="row" data-act="filter" data-f="week">${I.jobs.replace('<svg', '<svg class="ri"')}<span class="rt" style="flex:1">${chores} job${chores > 1 ? 's' : ''} due in the next 7 days</span><span class="end">${I.right.replace('<svg', '<svg width="16" height="16"')}</span></button>` : ''}</div>`;
+}
+function homeProjects(t) {
+  const act = S.projects.filter(p => p.status === 'active'), planned = S.projects.filter(p => p.status === 'planned');
+  if (!act.length && !planned.length) return '';
+  const p = act[0] || planned[0], nx = pNext(p), est = Number(p.estHours) || 0, lg = pLogged(p);
+  const others = act.length + planned.length - 1;
+  return `<div class="lab">Projects <button data-act="go" data-to="#/projects">All</button></div>
+  <button class="card" data-act="go" data-to="#/project/${p.id}" style="flex-direction:column;align-items:stretch;gap:10px">
+    <div style="display:flex;gap:12px;align-items:center">${pBadge(p)}<div class="ct"><div class="t">${esc(p.name)}</div><div class="s">${esc(PSTATUS[p.status])} · ${hrs(lg, p)} of ${hrs(est, p)}${p.steps?.length ? ` · ${p.steps.filter(x => x.done).length}/${p.steps.length} steps` : ''}</div></div></div>
+    <div class="hbar"><span style="width:${est ? Math.min(100, Math.round(lg / est * 100)) : 0}%;background:var(--wattle-d)"></span></div>
+    ${nx ? `<div class="banner" style="margin:0;display:flex;gap:8px;align-items:center">${I.timer.replace('<svg', '<svg width="16" height="16"')}Next session: ${esc(L.niceDate(nx.date, t))}, ${esc(time12(nx.start))} – ${esc(time12(nx.end))}</div>` : `<div class="hint">No sessions booked yet</div>`}
+    ${others > 0 ? `<div class="hint">${others} more project${others > 1 ? 's' : ''} on the go or planned</div>` : ''}
+  </button>`;
+}
+
+function viewProjects() {
+  const t = T(), f = S.pfilter || 'active';
+  const sets = { active: S.projects.filter(p => p.status === 'active' || p.status === 'planned'), idea: S.projects.filter(p => p.status === 'idea'), hold: S.projects.filter(p => p.status === 'hold'), done: S.projects.filter(p => p.status === 'done') };
+  const chip = (k, l) => `<button class="chip ${f === k ? 'on' : ''}" data-act="pfilter" data-f="${k}">${l} ${sets[k].length}</button>`;
+  const card = p => {
+    const est = Number(p.estHours) || 0, lg = pLogged(p), nx = pNext(p);
+    const sub = p.status === 'done' ? `Finished ${p.finishedAt ? L.niceDate(p.finishedAt, t) : ''} · took ${hrs(lg, p)} (est ${hrs(est, p)})` : `${nx ? 'Next session ' + L.niceDate(nx.date, t) : (p.sessions?.length ? 'No upcoming sessions' : 'No sessions booked')}${p.steps?.length ? ` · ${p.steps.filter(x => x.done).length}/${p.steps.length} steps` : ''}`;
+    return `<button class="card" data-act="go" data-to="#/project/${p.id}" style="flex-direction:column;align-items:stretch;gap:8px">
+      <div style="display:flex;gap:12px;align-items:center">${pBadge(p)}<div class="ct"><div class="t">${esc(p.name)}</div><div class="s">${esc(sub)}</div></div><span class="pill ${p.status === 'active' ? 'p-ok' : 'p-soon'}" style="${p.status === 'planned' || p.status === 'idea' ? 'background:#E3E5EE;color:var(--ink)' : ''}">${PSTATUS[p.status]}</span></div>
+      <div style="display:flex;align-items:center;gap:10px"><div class="hbar" style="flex:1"><span style="width:${est ? Math.min(100, Math.round(lg / est * 100)) : 0}%;background:var(--${cat(p.category).color === 'ink' ? 'ink' : cat(p.category).color + '-d'})"></span></div><span class="hint" style="font-weight:700;color:var(--ink)">${p.status === 'active' ? hrs(lg, p) + ' / ' : ''}${hrsBoth(est, p)}</span></div></button>`;
+  };
+  let body;
+  if (f === 'active') {
+    const a = sets.active.filter(p => p.status === 'active'), pl = sets.active.filter(p => p.status === 'planned');
+    body = (a.length ? `<div class="lab">In progress · ${a.length}</div><div class="list">${a.map(card).join('')}</div>` : '') +
+      (pl.length ? `<div class="lab">Planned · ${pl.length} <span>${hrs(pl.reduce((s, p) => s + (Number(p.estHours) || 0), 0))}</span></div><div class="list">${pl.map(card).join('')}</div>` : '');
+  } else body = sets[f].length ? `<div class="list" style="margin-top:8px">${sets[f].map(card).join('')}</div>` : '';
+  return `<div class="wrap"><div class="top"><div><div class="sub">Bigger one-off jobs</div><h1>Projects</h1></div></div>
+  <div class="chips">${chip('active', 'Active')}${chip('idea', 'Ideas')}${chip('hold', 'On hold')}${chip('done', 'Done')}</div>
+  ${body || `<div class="empty">${f === 'active' ? 'No projects yet. Tap + to add one, like “Pave behind the shed”.' : 'Nothing here.'}</div>`}
+  </div>${nav()}<button class="fab" data-act="go" data-to="#/pnew" aria-label="Add project">${I.plus}</button>`;
+}
+
+function viewProject(id) {
+  const p = findProj(id), t = T();
+  if (!p) return `<div class="wrap"><div class="top"><button class="iconbtn" data-act="back" aria-label="Back">${I.back}</button></div><div class="empty">That project has been deleted.</div></div>${nav()}`;
+  const c = cat(p.category), est = Number(p.estHours) || 0, lg = pLogged(p), bk = pBooked(p), spent = pSpent(p), stepsEst = pStepsEst(p);
+  const sess = [...(p.sessions || [])].sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+  const unit = p.unitPref || 'hours';
+  const btns = p.status === 'done'
+    ? `<button class="btn alt" style="box-shadow:none" data-act="pstatus" data-id="${p.id}" data-s="active">Reopen</button><button class="btn" data-act="logtime" data-id="${p.id}">+ Log time</button>`
+    : p.status === 'active'
+      ? `<button class="btn" data-act="logtime" data-id="${p.id}">+ Log time</button><button class="btn alt" style="box-shadow:none" data-act="pstatus" data-id="${p.id}" data-s="done">Mark finished</button>`
+      : `<button class="btn" data-act="pstatus" data-id="${p.id}" data-s="active">Start project</button><button class="btn alt" style="box-shadow:none" data-act="logtime" data-id="${p.id}">+ Log time</button>`;
+  const delBtn = (kind, i) => `<button class="x" data-act="pdel" data-id="${p.id}" data-k="${kind}" data-i="${i}" aria-label="Remove">×</button>`;
+  return `<div class="wrap">
+  <div class="dhead c-${c.color}" style="color:var(--ink)">
+    <div class="dtop"><button class="iconbtn" data-act="back" aria-label="Back">${I.back}</button><button class="iconbtn" data-act="go" data-to="#/pedit/${p.id}" aria-label="Edit project">${I.edit}</button></div>
+    <div><div class="sub" style="font-weight:700">${esc(c.name)}</div><h1 class="hd" style="margin:2px 0 0;font-size:28px;line-height:1.08">${esc(p.name)}</h1></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="pill" style="background:#fff;color:var(--ink)">${PSTATUS[p.status]}</span><span class="pill" style="background:#fff;color:var(--ink)">${p.assignee && p.assignee !== 'either' ? esc(person(p.assignee).name) : 'Shaun or Lyndsey'}</span>${p.budget ? `<span class="pill" style="background:#fff;color:var(--ink)">Budget ${money(p.budget)}</span>` : ''}</div>
+    <div class="btns">${btns}</div>
+  </div>
+  <div class="minis" style="margin-top:14px"><div class="mini"><b>${hrs(est, p)}</b><span>Estimate</span></div><div class="mini"><b style="color:var(--gum-d)">${hrs(lg, p)}</b><span>Logged</span></div><div class="mini"><b>${spent ? money(spent) : '–'}</b><span>${p.budget ? 'of ' + money(p.budget) : 'Spent'}</span></div></div>
+  ${p.status === 'done' && est ? `<div class="banner" style="background:var(--gum-l);color:var(--gum-d)">Estimate ${hrs(est, p)}, actual ${hrs(lg, p)}${lg > est ? ` (${hrs(lg - est, p)} over)` : lg < est ? ` (${hrs(est - lg, p)} under)` : ' (spot on)'}.</div>` : ''}
+  <div class="box" style="margin-top:10px;padding:8px 12px;display:flex;align-items:center;gap:10px"><span class="hint" style="flex:1">Show times in</span><div class="seg" style="flex:1.4">${['hours', 'days', 'weeks'].map(u => `<button class="${unit === u ? 'on' : ''}" data-act="punit" data-id="${p.id}" data-u="${u}">${u[0].toUpperCase() + u.slice(1)}</button>`).join('')}</div></div>
+
+  <div class="lab">Steps${p.steps?.length ? ` · ${p.steps.filter(x => x.done).length}/${p.steps.length}` : ''} ${stepsEst ? `<span>${hrs(stepsEst, p)}${est && Math.abs(stepsEst - est) > 0.05 ? ` (estimate ${hrs(est, p)})` : ''}</span>` : ''}</div>
+  <div class="box">${(p.steps || []).map((x, i) => `<div class="step ${x.done ? 'on' : ''}"><button class="cb ${x.done ? 'on' : ''}" data-act="ptoggle" data-id="${p.id}" data-k="steps" data-i="${i}" aria-label="Tick step">${I.tick}</button><span style="flex:1">${esc(x.text)}</span>${x.hours ? `<span class="hint" style="font-weight:700">${hrs(x.hours, p)}</span>` : ''}${delBtn('steps', i)}</div>`).join('')}
+  <form class="addstep" data-form="pstep" data-id="${p.id}"><input name="text" placeholder="Add step" aria-label="Step" maxlength="100"><input name="hours" type="number" min="0" step="0.5" placeholder="hrs" aria-label="Estimated hours" style="flex:0 0 64px"><button class="iconbtn" aria-label="Add step" style="box-shadow:none;background:var(--soft)">${I.plus}</button></form></div>
+
+  <div class="lab">Work sessions <span>shows on Calendar</span></div>
+  <div class="box">${sess.map((x, i) => `<div class="row" style="${x.date < t ? 'opacity:.6' : ''}">${I.cal.replace('<svg', '<svg class="ri"')}<div style="flex:1"><div class="rt">${esc(L.niceDate(x.date, t))} · ${esc(time12(x.start))} – ${esc(time12(x.end))}</div><div class="rs">${L.hoursText(x.hours)} booked${x.note ? ' · ' + esc(x.note) : ''}</div></div>${delBtn('sessions', (p.sessions || []).indexOf(x))}</div>`).join('')}
+  <button class="row" data-act="session" data-id="${p.id}" style="color:var(--terra-d);font-weight:700">+ Book a session</button></div>
+  ${est ? `<div class="hint" style="margin:6px 4px">${hrs(bk, p)} booked of ${hrs(est, p)} estimate${est > bk ? ` · ${hrs(est - bk, p)} still to book` : ''}</div>` : ''}
+
+  <div class="lab">Materials &amp; costs ${spent ? `<span>${money(spent)}</span>` : ''}</div>
+  <div class="box">${(p.materials || []).map((x, i) => `<div class="step ${x.done ? 'on' : ''}"><button class="cb ${x.done ? 'on' : ''}" data-act="ptoggle" data-id="${p.id}" data-k="materials" data-i="${i}" aria-label="Tick bought">${I.tick}</button><div style="flex:1"><span>${esc(x.text)}</span>${x.qty ? `<div class="rs">${esc(x.qty)}</div>` : ''}</div>${x.cost ? `<span class="hint" style="font-weight:700;color:var(--ink)">${money(x.cost)}</span>` : ''}${delBtn('materials', i)}</div>`).join('')}
+  <form class="addstep" data-form="pmat" data-id="${p.id}" style="flex-wrap:wrap"><input name="text" placeholder="Add material" aria-label="Material" maxlength="80" style="flex-basis:100%"><input name="qty" placeholder="Qty (e.g. 20 m²)" aria-label="Quantity" maxlength="30"><input name="cost" type="number" min="0" step="0.01" placeholder="$" aria-label="Cost" style="flex:0 0 80px"><button class="iconbtn" aria-label="Add material" style="box-shadow:none;background:var(--soft)">${I.plus}</button></form></div>
+
+  <div class="lab">Get ready <span>reminds you on the day</span></div>
+  <div class="box">${(p.prep || []).map((x, i) => `<div class="step ${x.done ? 'on' : ''}"><button class="cb ${x.done ? 'on' : ''}" data-act="ptoggle" data-id="${p.id}" data-k="prep" data-i="${i}" aria-label="Tick done">${I.tick}</button><div style="flex:1"><span>${esc(x.text)}</span><div class="rs">${esc(L.niceDate(x.date, t))}</div></div>${delBtn('prep', i)}</div>`).join('')}
+  <form class="addstep" data-form="pprep" data-id="${p.id}" style="flex-wrap:wrap"><input name="text" placeholder="e.g. Order pavers" aria-label="Prep task" maxlength="80" style="flex-basis:100%"><input name="date" type="date" aria-label="Remind on" required><button class="iconbtn" aria-label="Add prep reminder" style="box-shadow:none;background:var(--soft)">${I.plus}</button></form></div>
+
+  <div class="lab">Time log ${lg ? `<span>${hrs(lg, p)}</span>` : ''}</div>
+  <div class="box">${[...(p.timeLog || [])].map((x, i) => ({ ...x, i })).sort((a, b) => b.date.localeCompare(a.date)).map(x => `<div class="row">${I.timer.replace('<svg', '<svg class="ri"')}<div style="flex:1"><div class="rt">${L.hoursText(x.hours)} · ${esc(L.niceDate(x.date, t))}</div><div class="rs">${esc(person(x.by).name)}${x.note ? ' · ' + esc(x.note) : ''}</div></div>${delBtn('timeLog', x.i)}</div>`).join('') || `<div class="empty" style="padding:14px">Tap “+ Log time” after each session. When it's finished you'll see estimate vs actual.</div>`}</div>
+
+  <div class="lab">Notes</div>
+  <div class="box"><textarea class="notes" placeholder="Add note" data-change="pnotes" data-id="${p.id}" aria-label="Project notes">${esc(p.notes || '')}</textarea></div>
+  <div class="meta"><span>Added by ${esc(person(p.createdBy).name)}${p.createdAt ? ' on ' + esc(L.niceDate(p.createdAt.slice(0, 10), t)) : ''}</span><button class="iconbtn" style="box-shadow:none;background:none" data-act="pdelete" data-id="${p.id}" aria-label="Delete project">${I.trash}</button></div>
+  </div>${nav()}`;
+}
+
+function viewProjectEdit(id) {
+  if (!S.edProj || S.edProj._for !== (id || 'new')) {
+    const src = id ? findProj(id) : null;
+    const unit = src?.unitPref || 'hours';
+    S.edProj = src ? { ...clone(src), estN: src.estHours ? Math.round((unit === 'days' ? src.estHours / perDay() : unit === 'weeks' ? src.estHours / (perDay() * perWeek()) : src.estHours) * 10) / 10 : '', estU: unit }
+      : { name: '', category: 'house', status: 'planned', estN: '', estU: 'hours', budget: '', assignee: S.me.key, notes: '' };
+    S.edProj._for = id || 'new';
+  }
+  const e = S.edProj;
+  const opt = (v, l, cur) => `<option value="${v}" ${String(cur) === String(v) ? 'selected' : ''}>${esc(l)}</option>`;
+  const segB = (v, l) => `<button type="button" class="${e.assignee === v ? 'on' : ''}" data-act="pseg" data-v="${v}">${esc(l)}</button>`;
+  return `<div class="wrap"><form data-form="project" data-id="${id || ''}" class="form" novalidate>
+  <div class="fbar"><button type="button" data-act="back">Cancel</button><span class="hd" style="font-size:17px">${id ? 'Edit' : 'New'} project</span><button class="save" type="submit">Save</button></div>
+  <div class="grp"><label for="p-name">Name</label><input id="p-name" class="field" name="name" value="${esc(e.name)}" maxlength="80" placeholder="e.g. Pave behind the shed"><div class="err" id="pname-err" hidden>Give it a name first</div></div>
+  <div class="inline"><div class="grp" style="flex:1"><label for="p-cat">Category</label><select id="p-cat" class="field" name="category">${cats().map(c => opt(c.id, c.name, e.category)).join('')}</select></div>
+  <div class="grp" style="flex:1"><label for="p-st">Status</label><select id="p-st" class="field" name="status">${Object.entries(PSTATUS).map(([k, l]) => opt(k, l, e.status)).join('')}</select></div></div>
+  <div class="grp"><span class="l">Estimated time</span><div class="inline"><input class="field" style="width:90px;text-align:center;font-weight:700" type="number" min="0" step="0.5" name="estN" value="${esc(e.estN)}" aria-label="Estimate"><select class="field" name="estU" aria-label="Unit">${opt('hours', 'hours', e.estU)}${opt('days', 'days', e.estU)}${opt('weeks', 'weeks', e.estU)}</select></div><span class="hint">A day = ${perDay()} hours, a week = ${perWeek()} days (change in Settings).</span></div>
+  <div class="grp"><label for="p-bud">Budget (optional)</label><input id="p-bud" class="field" type="number" min="0" step="0.01" name="budget" value="${esc(e.budget ?? '')}" placeholder="$"></div>
+  <div class="grp"><span class="l">Whose project</span><div class="seg">${store.people.map(x => segB(x.key, x.name)).join('')}${segB('either', 'Both')}</div></div>
+  <div class="grp"><label for="p-notes">Notes</label><textarea id="p-notes" class="field" name="notes">${esc(e.notes || '')}</textarea></div>
+  <button class="btn terra" type="submit">Save</button></form></div>`;
+}
+
+function viewCalendar() {
+  const t = T();
+  if (!S.cal) S.cal = { month: t.slice(0, 7), sel: t, view: 'month' };
+  const c = S.cal;
+  const first = c.month + '-01', last = L.addDays(L.addMonths(first, 1), -1);
+  const lead = (L.weekday(first) + 6) % 7;
+  const ents = calEntries(first, last);
+  const byDay = {}; for (const e of ents) (byDay[e.date] = byDay[e.date] || []).push(e);
+  const title = new Intl.DateTimeFormat('en-AU', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(L.parse(first));
+  let grid = '';
+  for (let i = 0; i < lead; i++) grid += '<div></div>';
+  for (let d = first; d <= last; d = L.addDays(d, 1)) {
+    const es = byDay[d] || [], away = es.some(e => e.away), sel = d === c.sel, today = d === t;
+    const dots = [...new Set(es.map(e => e.color))].slice(0, 4).map(col => `<i style="background:${col}"></i>`).join('');
+    grid += `<button class="cday${sel ? ' sel' : ''}${away ? ' away' : ''}${today ? ' today' : ''}" data-act="cday" data-d="${d}" aria-label="${L.niceDate(d, t)}${es.length ? ', ' + es.length + ' things' : ''}"><span>${Number(d.slice(8))}</span><span class="dots">${dots}</span></button>`;
+  }
+  let lower;
+  if (c.view === 'agenda') {
+    const ag = calEntries(t, L.addDays(t, 60)); const g = {};
+    for (const e of ag) (g[e.date] = g[e.date] || []).push(e);
+    lower = Object.keys(g).map(d => `<div class="lab">${d === t ? 'Today' : esc(L.niceDate(d, t))}</div><div class="box">${g[d].map(entryRow).join('')}</div>`).join('') || '<div class="empty">Nothing in the next 60 days.</div>';
+  } else {
+    const es = calEntries(c.sel, c.sel);
+    lower = `<div class="lab">${c.sel === t ? 'Today' : esc(L.niceDate(c.sel, t))} <button data-act="go" data-to="#/event/new?date=${c.sel}">+ Event this day</button></div>${es.length ? `<div class="box">${es.map(entryRow).join('')}</div>` : '<div class="empty" style="padding:14px">Nothing on this day.</div>'}`;
+  }
+  return `<div class="wrap">
+  <div class="top"><h1>${esc(title)}</h1><div style="display:flex;gap:6px"><button class="iconbtn" data-act="cmonth" data-n="-1" aria-label="Previous month">${I.left}</button><button class="chip" data-act="ctoday">Today</button><button class="iconbtn" data-act="cmonth" data-n="1" aria-label="Next month">${I.right}</button></div></div>
+  <div class="seg" style="margin-bottom:10px"><button class="${c.view !== 'agenda' ? 'on' : ''}" data-act="cview" data-v="month">Month</button><button class="${c.view === 'agenda' ? 'on' : ''}" data-act="cview" data-v="agenda">Agenda</button></div>
+  ${c.view !== 'agenda' ? `<div class="cal">${['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(d => `<div class="cdow">${d}</div>`).join('')}${grid}</div>
+  <div class="legend" style="margin:8px 4px;flex-wrap:wrap"><span><i class="lg" style="background:#C8553D"></i>Jobs</span><span><i class="lg" style="background:#6B8F47"></i>Items</span><span><i class="lg" style="background:#3D5A6C"></i>Events</span><span><i class="lg" style="background:#E9C46A"></i>Projects</span><span><i class="lg" style="background:#A0703C"></i>Get ready</span><span><i class="lg" style="background:var(--slate-l);width:14px;border-radius:3px"></i>Away</span></div>` : ''}
+  ${lower}
+  </div>${nav()}<button class="fab" data-act="go" data-to="#/event/new?date=${c.sel}" aria-label="Add event" style="width:auto;padding:0 18px;gap:6px;font-weight:700">${I.plus}Event</button>`;
+}
+
+function viewEventEdit(id, params) {
+  const t = T();
+  if (!S.edEv || S.edEv._for !== (id || 'new')) {
+    const src = id ? findEv(id) : null;
+    S.edEv = src ? clone(src) : { title: '', type: 'Hobby', date: params.get('date') || t, endDate: '', allDay: true, start: '09:00', end: '12:00', repeat: 'none', until: '', visibility: 'shared', away: false, remind: 'none', notes: '' };
+    S.edEv.range = !!S.edEv.endDate && S.edEv.endDate !== S.edEv.date;
+    S.edEv._for = id || 'new';
+  }
+  const e = S.edEv;
+  const opt = (v, l, cur) => `<option value="${v}" ${String(cur) === String(v) ? 'selected' : ''}>${esc(l)}</option>`;
+  return `<div class="wrap"><form data-form="event" data-id="${id || ''}" class="form" novalidate>
+  <div class="fbar"><button type="button" data-act="back">Cancel</button><span class="hd" style="font-size:17px">${id ? 'Edit' : 'Add'} event</span><button class="save" type="submit">Save</button></div>
+  <div class="grp"><label for="e-title">What</label><input id="e-title" class="field" name="title" value="${esc(e.title)}" maxlength="80" placeholder="e.g. Philippines video edit"><div class="err" id="etitle-err" hidden>Give it a name first</div></div>
+  <div class="chips" style="flex-wrap:wrap">${evTypes().map(x => `<button type="button" class="chip ${e.type === x ? 'on' : ''}" data-act="evtype" data-v="${esc(x)}">${esc(x)}</button>`).join('')}<button type="button" class="chip" data-act="evnewtype">+ New type</button></div>
+  <div class="seg"><button type="button" class="${!e.range ? 'on' : ''}" data-act="evrange" data-v="0">One day</button><button type="button" class="${e.range ? 'on' : ''}" data-act="evrange" data-v="1">Date range</button></div>
+  <div class="inline"><div class="grp" style="flex:1"><label for="e-date">${e.range ? 'From' : 'Date'}</label><input id="e-date" class="field" type="date" name="date" value="${esc(e.date)}"></div>
+  ${e.range ? `<div class="grp" style="flex:1"><label for="e-end">To</label><input id="e-end" class="field" type="date" name="endDate" value="${esc(e.endDate || e.date)}"></div>` : ''}</div>
+  <label class="check"><input type="checkbox" name="allDay" data-change="allday" ${e.allDay !== false ? 'checked' : ''}> All day</label>
+  ${e.allDay === false ? `<div class="inline"><div class="grp" style="flex:1"><label for="e-s">Starts</label><input id="e-s" class="field" type="time" name="start" value="${esc(e.start || '09:00')}"></div><div class="grp" style="flex:1"><label for="e-e">Ends</label><input id="e-e" class="field" type="time" name="end" value="${esc(e.end || '12:00')}"></div></div>` : ''}
+  <div class="hint" style="font-weight:700;color:var(--ink);margin-bottom:-8px">Optional</div>
+  <div class="inline"><div class="grp" style="flex:1"><label for="e-rep">Repeat</label><select id="e-rep" class="field" name="repeat" data-change="evrepeat">${opt('none', 'Does not repeat', e.repeat)}${opt('weekly', 'Weekly', e.repeat)}${opt('fortnightly', 'Fortnightly', e.repeat)}${opt('monthly', 'Monthly', e.repeat)}${opt('yearly', 'Yearly', e.repeat)}</select></div>
+  ${e.repeat && e.repeat !== 'none' ? `<div class="grp" style="flex:1"><label for="e-until">Until (optional)</label><input id="e-until" class="field" type="date" name="until" value="${esc(e.until || '')}"></div>` : ''}</div>
+  <div class="grp"><label for="e-rem">Remind me</label><select id="e-rem" class="field" name="remind">${Object.entries(L.EVENT_REMIND).map(([k, l]) => opt(k, l, e.remind)).join('')}</select></div>
+  <div class="grp"><span class="l">Who can see it</span><div class="seg"><button type="button" class="${e.visibility !== 'private' ? 'on' : ''}" data-act="evvis" data-v="shared">Both of us</button><button type="button" class="${e.visibility === 'private' ? 'on' : ''}" data-act="evvis" data-v="private">Just me</button></div></div>
+  <label class="check"><input type="checkbox" name="away" ${e.away ? 'checked' : ''}> Away: pause chore reminders on these days</label>
+  <div class="grp"><label for="e-notes">Notes</label><textarea id="e-notes" class="field" name="notes">${esc(e.notes || '')}</textarea></div>
+  <button class="btn terra" type="submit">Save</button>
+  ${id ? `<button type="button" class="btn ghost" style="color:var(--late-d)" data-act="evdelete" data-id="${id}">Delete event</button>` : ''}
+  </form></div>`;
+}
+function syncEvForm() {
+  const f = document.querySelector('[data-form=event]'); if (!f || !S.edEv) return;
+  const fd = new FormData(f);
+  for (const k of ['title', 'date', 'endDate', 'start', 'end', 'repeat', 'until', 'remind', 'notes']) if (fd.has(k)) S.edEv[k] = fd.get(k);
+  S.edEv.allDay = fd.has('allDay'); S.edEv.away = fd.has('away');
+}
+function syncProjForm() {
+  const f = document.querySelector('[data-form=project]'); if (!f || !S.edProj) return;
+  const fd = new FormData(f);
+  for (const k of ['name', 'category', 'status', 'estN', 'estU', 'budget', 'notes']) if (fd.has(k)) S.edProj[k] = fd.get(k);
+}
+
 // ---------- sheets ----------
 function sheetHtml() {
   const sh = S.sheet; if (!sh) return '';
-  const j = findJob(sh.id), t = T();
+  const t = T();
+  if (sh.type === 'logtime' || sh.type === 'session') {
+    const p = findProj(sh.id); if (!p) return '';
+    if (sh.type === 'logtime') return `<div class="scrim" data-act="closesheet"><div class="sheet" role="dialog" aria-label="Log time" data-stop>
+    <div class="grab"></div><div><h2>Log time</h2><div class="hint" style="margin-top:4px;font-size:13px">${esc(p.name)} · ${hrs(pLogged(p), p)} logged so far</div></div>
+    <div class="opts">${[1, 2, 3, 4, 6].map(n => `<button class="opt ${Number(sh.hours) === n ? 'on' : ''}" data-act="lthours" data-n="${n}">${n}h</button>`).join('')}</div>
+    <div class="inline"><div class="grp" style="flex:1"><label for="lt-h">Hours</label><input id="lt-h" class="field" type="number" min="0.25" step="0.25" value="${esc(sh.hours)}" data-change="lth"></div><div class="grp" style="flex:1.4"><label for="lt-d">Date</label><input id="lt-d" class="field" type="date" max="${t}" value="${esc(sh.date)}" data-change="ltd"></div></div>
+    <div class="grp"><label for="lt-n">What got done (optional)</label><input id="lt-n" class="field" value="${esc(sh.note || '')}" data-change="ltn" maxlength="100" placeholder="e.g. Dug out and levelled base"></div>
+    <div class="btns"><button class="btn alt" data-act="closesheet">Cancel</button><button class="btn terra" style="flex:2" data-act="dologtime">Log ${esc(L.hoursText(Number(sh.hours) || 0))}</button></div></div></div>`;
+    const h = L.spanHours(sh.start, sh.end);
+    const free = sh.date ? [...L.awayPeople(visibleEvents(), sh.date, store.people.map(x => x.key))] : [];
+    return `<div class="scrim" data-act="closesheet"><div class="sheet" role="dialog" aria-label="Book a session" data-stop>
+    <div class="grab"></div><div><h2>Book a work session</h2><div class="hint" style="margin-top:4px;font-size:13px">${esc(p.name)} · any day, weekends included</div></div>
+    <div class="grp"><label for="ss-d">Day</label><input id="ss-d" class="field" type="date" min="${t}" value="${esc(sh.date)}" data-change="ssd"></div>
+    <div class="inline"><div class="grp" style="flex:1"><label for="ss-s">From</label><input id="ss-s" class="field" type="time" value="${esc(sh.start)}" data-change="sss"></div><div class="grp" style="flex:1"><label for="ss-e">To</label><input id="ss-e" class="field" type="time" value="${esc(sh.end)}" data-change="sse"></div></div>
+    <div class="grp"><label for="ss-n">Plan (optional)</label><input id="ss-n" class="field" value="${esc(sh.note || '')}" data-change="ssn" maxlength="80" placeholder="e.g. Lay first 10 m²"></div>
+    <div class="preview">${h > 0 ? `<b>${esc(L.hoursText(h))}</b> on ${esc(L.niceDate(sh.date, t))}. Shows on the Calendar for both of you.` : 'End time needs to be after the start.'}${free.length ? ` Heads up: ${esc(free.map(k => person(k).name).join(' & '))} marked away that day.` : ''}</div>
+    <div class="btns"><button class="btn alt" data-act="closesheet">Cancel</button><button class="btn terra" style="flex:2" data-act="dosession" ${h > 0 ? '' : 'disabled'}>Book it</button></div></div></div>`;
+  }
+  if (sh.type === 'pconfirm') {
+    const p = findProj(sh.id);
+    return `<div class="scrim" data-act="closesheet"><div class="sheet" role="dialog" aria-label="Confirm" data-stop>
+    <div class="grab"></div><h2>Delete “${esc(p?.name || '')}”?</h2><div class="hint" style="font-size:14px">This removes the project, its sessions and time log for both of you.</div>
+    <div class="btns"><button class="btn alt" data-act="closesheet">Keep it</button><button class="btn" style="background:var(--late-d)" data-act="dopdelete">Delete</button></div></div></div>`;
+  }
+  const j = findJob(sh.id);
   if (!j && sh.type !== 'confirm') return '';
   if (sh.type === 'extend') {
     const amt = sh.amt || { n: 2, unit: 'weeks' };
@@ -395,6 +672,8 @@ function render() {
   const v = parts[0] || 'home';
   let html;
   if (v !== 'edit' && v !== 'new') S.editing = null;
+  if (v !== 'pedit' && v !== 'pnew') S.edProj = null;
+  if (v !== 'event') S.edEv = null;
   if (v === 'jobs') html = viewJobs();
   else if (v === 'items') html = viewItems();
   else if (v === 'history') html = viewHistory();
@@ -402,6 +681,12 @@ function render() {
   else if (v === 'edit') html = viewEdit(parts[1], params);
   else if (v === 'new') html = viewEdit(null, params);
   else if (v === 'settings') html = viewSettings();
+  else if (v === 'projects') html = viewProjects();
+  else if (v === 'project') html = viewProject(parts[1]);
+  else if (v === 'pedit') html = viewProjectEdit(parts[1]);
+  else if (v === 'pnew') html = viewProjectEdit(null);
+  else if (v === 'calendar') html = viewCalendar();
+  else if (v === 'event') html = viewEventEdit(parts[1] && parts[1] !== 'new' ? parts[1] : null, params);
   else html = viewHome();
   const y = S.keepScroll ? window.scrollY : 0;
   $app.innerHTML = html + sheetHtml();
@@ -514,7 +799,39 @@ document.addEventListener('click', async ev => {
     case 'signout': await store.signOut(); break;
     case 'push': { const r = await store.enablePush(); toast(r.ok ? 'Reminders on' : 'Reminders', r.msg); rerender(); break; }
     case 'delcat': { const cs = clone(cats()); cs.splice(+el.dataset.i, 1); await store.saveSettings({ categories: cs }); break; }
-    case 'export': download(`taskforce-backup-${T()}.json`, JSON.stringify({ app: 'TaskForce', version: VERSION, exported: nowIso(), jobs: S.jobs, history: S.history, settings: S.settings }, null, 1)); break;
+    case 'export': download(`taskforce-backup-${T()}.json`, JSON.stringify({ app: 'TaskForce', version: VERSION, exported: nowIso(), jobs: S.jobs, history: S.history, projects: S.projects, events: S.events, settings: S.settings }, null, 1)); break;
+    // projects
+    case 'pfilter': S.pfilter = el.dataset.f; rerender(); break;
+    case 'pseg': syncProjForm(); S.edProj.assignee = el.dataset.v; rerender(); break;
+    case 'punit': await store.saveDoc('projects', id, { unitPref: el.dataset.u }); break;
+    case 'pstatus': { const p = findProj(id); if (!p) break; const upd = { status: el.dataset.s };
+      if (el.dataset.s === 'done') upd.finishedAt = T(); if (el.dataset.s === 'active' && !p.startedAt) upd.startedAt = T();
+      await store.saveDoc('projects', id, upd); if (el.dataset.s === 'done') { confetti(); toast('Project finished!', `${p.name} · ${hrs(pLogged(p), p)} logged`); } break; }
+    case 'ptoggle': { const p = findProj(id); if (!p) break; const k = el.dataset.k, arr = clone(p[k] || []); arr[+el.dataset.i].done = !arr[+el.dataset.i].done; await store.saveDoc('projects', id, { [k]: arr }); break; }
+    case 'pdel': { const p = findProj(id); if (!p) break; const k = el.dataset.k, arr = clone(p[k] || []); arr.splice(+el.dataset.i, 1); await store.saveDoc('projects', id, { [k]: arr }); break; }
+    case 'logtime': S.sheet = { type: 'logtime', id, hours: 2, date: T(), note: '' }; rerender(); break;
+    case 'lthours': S.sheet.hours = +el.dataset.n; rerender(); break;
+    case 'dologtime': { const sh = S.sheet, p = findProj(sh.id), h = Number(sh.hours) || 0; if (!p || h <= 0) break;
+      const upd = { timeLog: [...(p.timeLog || []), { date: sh.date || T(), hours: h, note: sh.note || '', by: S.me.key }] };
+      if (p.status === 'planned' || p.status === 'idea') { upd.status = 'active'; upd.startedAt = upd.startedAt || T(); }
+      S.sheet = null; await store.saveDoc('projects', p.id, upd); rerender(); toast('Time logged', `${L.hoursText(h)} on ${p.name}`); break; }
+    case 'session': { const p = findProj(id); let d = T(); const wd = L.weekday(d); if (wd !== 6 && wd !== 0) d = L.addDays(d, 6 - wd);
+      S.sheet = { type: 'session', id, date: d, start: '08:00', end: '14:00', note: '' }; rerender(); break; }
+    case 'dosession': { const sh = S.sheet, p = findProj(sh.id), h = L.spanHours(sh.start, sh.end); if (!p || h <= 0) break;
+      S.sheet = null; await store.saveDoc('projects', p.id, { sessions: [...(p.sessions || []), { date: sh.date, start: sh.start, end: sh.end, hours: h, note: sh.note || '', by: S.me.key }] }); rerender(); toast('Session booked', `${L.niceDate(sh.date, T())} · ${L.hoursText(h)}`); break; }
+    case 'pdelete': S.sheet = { type: 'pconfirm', id }; rerender(); break;
+    case 'dopdelete': { const did = S.sheet.id; S.sheet = null; location.hash = '#/projects'; await store.deleteDoc('projects', did); toast('Project deleted', ''); break; }
+    // calendar & events
+    case 'cday': S.cal.sel = el.dataset.d; rerender(); break;
+    case 'cmonth': { const m = L.addMonths(S.cal.month + '-01', +el.dataset.n).slice(0, 7); S.cal.month = m; S.cal.sel = m === T().slice(0, 7) ? T() : m + '-01'; rerender(); break; }
+    case 'ctoday': S.cal.month = T().slice(0, 7); S.cal.sel = T(); rerender(); break;
+    case 'cview': S.cal.view = el.dataset.v; rerender(); break;
+    case 'evtype': syncEvForm(); S.edEv.type = el.dataset.v; if ((el.dataset.v === 'Holiday' || el.dataset.v === 'Leave') && !S.edEv.range) { S.edEv.range = true; S.edEv.away = true; } rerender(); break;
+    case 'evnewtype': { syncEvForm(); const n = (prompt('New event type (e.g. Video editing)') || '').trim().slice(0, 24); if (!n) break;
+      if (!evTypes().includes(n)) await store.saveSettings({ eventTypes: [...evTypes(), n] }); S.edEv.type = n; rerender(); break; }
+    case 'evrange': syncEvForm(); S.edEv.range = el.dataset.v === '1'; if (S.edEv.range && (!S.edEv.endDate || S.edEv.endDate < S.edEv.date)) S.edEv.endDate = S.edEv.date; rerender(); break;
+    case 'evvis': syncEvForm(); S.edEv.visibility = el.dataset.v; rerender(); break;
+    case 'evdelete': if (confirm('Delete this event?')) { await store.deleteDoc('events', id); S.edEv = null; location.replace('#/calendar'); toast('Event deleted', ''); } break;
     case 'starter': await store.loadStarter(); toast('Starter list loaded', '22 jobs added'); break;
     case 'resetdemo': await store.resetDemo(); toast('Demo reset', ''); break;
   }
@@ -571,6 +888,17 @@ document.addEventListener('change', async ev => {
     case 'amtunit': S.sheet.amt = { ...S.sheet.amt, unit: el.value }; rerender(); break;
     case 'xnote': S.sheet.note = el.value; break;
     case 'xnormal': S.sheet.normal = el.checked; break;
+    case 'lth': S.sheet.hours = Math.max(0, +el.value || 0); rerender(); break;
+    case 'ltd': S.sheet.date = el.value || T(); break;
+    case 'ltn': S.sheet.note = el.value; break;
+    case 'ssd': S.sheet.date = el.value || T(); rerender(); break;
+    case 'sss': S.sheet.start = el.value; rerender(); break;
+    case 'sse': S.sheet.end = el.value; rerender(); break;
+    case 'ssn': S.sheet.note = el.value; break;
+    case 'pnotes': await store.saveDoc('projects', el.dataset.id, { notes: el.value }); break;
+    case 'perday': await store.saveSettings({ hoursPerDay: Math.max(1, Math.min(24, +el.value || 6)) }); toast('Saved', `A project day = ${el.value} hours`); break;
+    case 'perweek': await store.saveSettings({ daysPerWeek: Math.max(1, Math.min(7, +el.value || 5)) }); toast('Saved', `A project week = ${el.value} days`); break;
+    case 'allday': case 'evrepeat': syncEvForm(); rerender(); break;
     case 'donedate': S.sheet.date = el.value || T(); rerender(); break;
   }
 });
@@ -582,6 +910,29 @@ document.addEventListener('submit', async ev => {
   } else if (f.dataset.form === 'step') {
     const j = findJob(f.dataset.id), text = String(fd.get('text') || '').trim();
     if (j && text) await store.saveJob(j.id, { steps: [...(j.steps || []), { text, done: false }] });
+  } else if (f.dataset.form === 'pstep' || f.dataset.form === 'pmat' || f.dataset.form === 'pprep') {
+    const p = findProj(f.dataset.id), text = String(fd.get('text') || '').trim(); if (!p || !text) return;
+    if (f.dataset.form === 'pstep') await store.saveDoc('projects', p.id, { steps: [...(p.steps || []), { text, hours: Number(fd.get('hours')) || 0, done: false }] });
+    if (f.dataset.form === 'pmat') await store.saveDoc('projects', p.id, { materials: [...(p.materials || []), { text, qty: String(fd.get('qty') || '').trim(), cost: Number(fd.get('cost')) || 0, done: false }] });
+    if (f.dataset.form === 'pprep') { const date = fd.get('date'); if (!date) { toast('Pick a day for the reminder', ''); return; } await store.saveDoc('projects', p.id, { prep: [...(p.prep || []), { text, date, done: false }] }); }
+  } else if (f.dataset.form === 'project') {
+    syncProjForm(); const e = S.edProj, name = String(e.name || '').trim();
+    if (!name) { document.getElementById('pname-err').hidden = false; document.getElementById('p-name').focus(); return; }
+    const unit = e.estU || 'hours';
+    const data = { name, category: e.category, status: e.status || 'planned', estHours: e.estN === '' || e.estN == null ? 0 : L.toHours(Number(e.estN) || 0, unit, perDay(), perWeek()), unitPref: unit, budget: e.budget === '' || e.budget == null ? null : Number(e.budget), assignee: e.assignee || 'either', notes: e.notes || '' };
+    const id = f.dataset.id;
+    if (id) { await store.saveDoc('projects', id, data); S.edProj = null; history.back(); toast('Saved', name); }
+    else { const nid = await store.saveDoc('projects', null, { ...data, steps: [], materials: [], sessions: [], prep: [], timeLog: [], createdBy: S.me.key, createdAt: nowIso() }); S.edProj = null; location.replace('#/project/' + nid); toast('Project added', name); }
+  } else if (f.dataset.form === 'event') {
+    syncEvForm(); const e = S.edEv, title = String(e.title || '').trim();
+    if (!title) { document.getElementById('etitle-err').hidden = false; document.getElementById('e-title').focus(); return; }
+    const data = { title, type: e.type || 'Event', date: e.date || T(), endDate: e.range && e.endDate && e.endDate > e.date ? e.endDate : null, allDay: e.allDay !== false, start: e.allDay === false ? e.start : null, end: e.allDay === false ? e.end : null,
+      repeat: e.repeat || 'none', until: e.repeat && e.repeat !== 'none' && e.until ? e.until : null, visibility: e.visibility === 'private' ? 'private' : 'shared', owner: e.owner || S.me.key, away: !!e.away, remind: e.remind || 'none', notes: e.notes || '' };
+    const id = f.dataset.id;
+    if (id) { const old = findEv(id); if (old && (old.date !== data.date || old.start !== data.start || old.remind !== data.remind)) data.notify = null; await store.replaceDoc('events', id, { ...old, ...data, notify: data.notify === null ? null : old?.notify || null }); }
+    else await store.saveDoc('events', null, { ...data, createdBy: S.me.key, createdAt: nowIso() });
+    S.edEv = null; if (S.cal) { S.cal.sel = data.date; S.cal.month = data.date.slice(0, 7); } else S.cal = { month: data.date.slice(0, 7), sel: data.date, view: 'month' };
+    location.replace('#/calendar'); toast(id ? 'Event saved' : 'Event added', `${title} · ${L.niceDate(data.date, T())}`);
   } else if (f.dataset.form === 'cat') {
     const name = String(fd.get('name') || '').trim(); if (!name) return;
     const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 20) || 'cat';
@@ -631,6 +982,8 @@ store.start(me => {
   let first = { jobs: true, hist: true };
   unsubs.push(store.onJobs(list => { S.jobs = list; if (first.jobs) { first.jobs = false; ready(); } else rerender(); }));
   unsubs.push(store.onHistory(list => { S.history = list; if (first.hist) { first.hist = false; ready(); } else rerender(); }));
+  unsubs.push(store.onCol('projects', list => { S.projects = list; if (S.loaded) rerender(); }));
+  unsubs.push(store.onCol('events', list => { S.events = list; if (S.loaded) rerender(); }));
   unsubs.push(store.onSettings(s => { S.settings = { categories: DEFAULT_CATEGORIES, defaultTime: '18:00', ...s }; if (S.loaded) rerender(); }));
   render();
 }).catch(e => { $app.innerHTML = `<div class="login">${shieldSvg(72)}<div class="err">Couldn’t start TaskForce: ${esc(e.message || e)}</div></div>`; });

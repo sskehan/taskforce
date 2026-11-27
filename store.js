@@ -13,7 +13,7 @@ class DemoStore {
   constructor() {
     this.mode = 'demo';
     this.people = [{ key: 'shaun', name: 'Shaun' }, { key: 'lyndsey', name: 'Lyndsey' }];
-    this.subs = { jobs: [], history: [], settings: [] };
+    this.subs = { jobs: [], history: [], settings: [], projects: [], events: [] };
     this.load();
   }
   load() {
@@ -26,8 +26,12 @@ class DemoStore {
       this.persist();
     }
   }
+  ensure() { this.db.projects = this.db.projects || {}; this.db.events = this.db.events || {}; }
   persist() { try { localStorage.setItem('tf-demo', JSON.stringify(this.db)); } catch (e) { console.warn(e); } }
   emit() {
+    this.ensure();
+    this.subs.projects.forEach(cb => cb(Object.values(this.db.projects)));
+    this.subs.events.forEach(cb => cb(Object.values(this.db.events)));
     const jobs = Object.values(this.db.jobs);
     const hist = Object.values(this.db.history).sort((a, b) => (b.at || '').localeCompare(a.at || ''));
     this.subs.jobs.forEach(cb => cb(jobs));
@@ -57,11 +61,18 @@ class DemoStore {
   }
   async addHistory(e) { const id = uid(); this.db.history[id] = { ...clean(e), id }; this.persist(); this.emit(); return id; }
   async deleteHistory(id) { delete this.db.history[id]; this.persist(); this.emit(); }
+  onCol(col, cb) { this.subs[col].push(cb); setTimeout(() => this.emit()); }
+  async saveDoc(col, id, data) { this.ensure(); id = id || uid(); this.db[col][id] = { ...(this.db[col][id] || {}), ...clean(data), id }; this.persist(); this.emit(); return id; }
+  async replaceDoc(col, id, data) { this.ensure(); this.db[col][id] = { ...clean(data), id }; this.persist(); this.emit(); }
+  async deleteDoc(col, id) { this.ensure(); delete this.db[col][id]; this.persist(); this.emit(); }
   async saveSettings(s) { this.db.settings = { ...this.db.settings, ...clean(s) }; this.persist(); this.emit(); }
   async importAll(data, replace) {
     if (replace) { this.db.jobs = {}; this.db.history = {}; }
     for (const j of data.jobs || []) { const id = j.id || uid(); this.db.jobs[id] = { ...j, id }; }
     for (const h of data.history || []) { const id = h.id || uid(); this.db.history[id] = { ...h, id }; }
+    this.ensure();
+    if (replace) { this.db.projects = {}; this.db.events = {}; }
+    for (const c of ['projects', 'events']) for (const x of data[c] || []) { const id = x.id || uid(); this.db[c][id] = { ...x, id }; }
     if (data.settings) this.db.settings = { ...this.db.settings, ...data.settings };
     this.persist(); this.emit();
   }
@@ -125,6 +136,19 @@ class FireStore {
     const hs = await getDocs(query(collection(this.db, 'history'), where('jobId', '==', id)));
     await Promise.all(hs.docs.map(h => deleteDoc(h.ref)));
   }
+  onCol(col, cb) {
+    const { collection, onSnapshot } = this.fs;
+    return onSnapshot(collection(this.db, col), snap => cb(snap.docs.map(d => ({ ...d.data(), id: d.id }))), e => console.error(e));
+  }
+  async saveDoc(col, id, data) {
+    const { doc, collection, setDoc } = this.fs;
+    const ref = id ? doc(this.db, col, id) : doc(collection(this.db, col));
+    const d = clean(data); delete d.id; delete d.notify;
+    await setDoc(ref, d, { merge: true });
+    return ref.id;
+  }
+  async replaceDoc(col, id, data) { const { doc, setDoc } = this.fs; const d = clean(data); delete d.id; await setDoc(doc(this.db, col, id), d); }
+  async deleteDoc(col, id) { const { doc, deleteDoc } = this.fs; await deleteDoc(doc(this.db, col, id)); }
   async addHistory(e) {
     const { collection, addDoc } = this.fs;
     const r = await addDoc(collection(this.db, 'history'), clean(e));
@@ -135,7 +159,7 @@ class FireStore {
   async importAll(data, replace) {
     const { doc, setDoc, collection, writeBatch, getDocs } = this.fs;
     if (replace) {
-      for (const c of ['jobs', 'history']) {
+      for (const c of ['jobs', 'history', 'projects', 'events']) {
         const snap = await getDocs(collection(this.db, c));
         for (let i = 0; i < snap.docs.length; i += 400) {
           const b = writeBatch(this.db); snap.docs.slice(i, i + 400).forEach(d => b.delete(d.ref)); await b.commit();
@@ -151,6 +175,8 @@ class FireStore {
     };
     await put('jobs', data.jobs || []);
     await put('history', data.history || []);
+    await put('projects', data.projects || []);
+    await put('events', data.events || []);
     if (data.settings) await setDoc(doc(this.db, 'settings', 'app'), clean(data.settings), { merge: true });
   }
   async loadStarter() {

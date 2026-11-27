@@ -196,3 +196,86 @@ export function spanText(days) {
   if (m === 0) return `${Math.round(days / 7)} wks`;
   return w ? `${m} m ${w} w` : `${m} m`;
 }
+
+// ---- Events (v1.04) ----
+// Occurrences of an event whose span touches [from, to]. Returns [{date, end}].
+export function eventOccurrences(ev, from, to, cap = 400) {
+  if (!ev || !ev.date) return [];
+  const span = ev.endDate && ev.endDate > ev.date ? daysBetween(ev.date, ev.endDate) : 0;
+  const out = [];
+  const step = k => {
+    switch (ev.repeat) {
+      case 'weekly': return addDays(ev.date, 7 * k);
+      case 'fortnightly': return addDays(ev.date, 14 * k);
+      case 'monthly': return addMonths(ev.date, k);
+      case 'yearly': return addMonths(ev.date, 12 * k);
+      default: return k === 0 ? ev.date : null;
+    }
+  };
+  for (let k = 0; k < cap; k++) {
+    const d = step(k);
+    if (!d || d > to) break;
+    if (ev.until && d > ev.until) break;
+    const end = addDays(d, span);
+    if (end >= from) out.push({ date: d, end });
+  }
+  return out;
+}
+export function eventOnDate(ev, d) { return eventOccurrences(ev, d, d).length > 0; }
+
+export const EVENT_REMIND = { none: 'No reminder', start: 'When it starts', '1h': '1 hour before', '1d': 'The day before', '1w': 'A week before' };
+// Should an event reminder go now? Returns the occurrence date to record, or null.
+export function eventReminderDue(ev, now, defHour = 18) {
+  const r = ev.remind || 'none';
+  if (r === 'none') return null;
+  const startHour = ev.allDay !== false || !ev.start ? 7 : Number(String(ev.start).split(':')[0]);
+  const occs = eventOccurrences(ev, now.date, addDays(now.date, 8));
+  for (const o of occs) {
+    if (o.date < now.date) continue; // already started
+    let tDate = o.date, tHour = startHour;
+    if (r === '1h') tHour = Math.max(0, startHour - 1);
+    if (r === '1d') { tDate = addDays(o.date, -1); tHour = defHour; }
+    if (r === '1w') { tDate = addDays(o.date, -7); tHour = defHour; }
+    const reached = now.date > tDate || (now.date === tDate && now.hour >= tHour);
+    if (reached && (!ev.notify || ev.notify.occ !== o.date)) return o.date;
+  }
+  return null;
+}
+// People who are "away" today (reminders for jobs are paused for them).
+export function awayPeople(events, day, allKeys) {
+  const set = new Set();
+  for (const ev of events) {
+    if (!ev.away || !eventOnDate(ev, day)) continue;
+    if (ev.visibility === 'private' && ev.owner) set.add(ev.owner); else allKeys.forEach(k => set.add(k));
+  }
+  return set;
+}
+// Project prep reminders due now.
+export function prepDue(p, now, defHour = 18) {
+  return (p.prep || []).filter(x => !x.done && !x.notified && x.date && (now.date > x.date || (now.date === x.date && now.hour >= defHour)));
+}
+// Hours shown as hours, days or weeks.
+export function hoursText(h, unit = 'hours', perDay = 6, daysPerWeek = 5) {
+  h = Math.round((Number(h) || 0) * 10) / 10;
+  if (unit === 'days') { const d = Math.round((h / perDay) * 10) / 10; return `${d} d`; }
+  if (unit === 'weeks') { const w = Math.round((h / (perDay * daysPerWeek)) * 10) / 10; return `${w} wk${w === 1 ? '' : 's'}`; }
+  return `${h} h`;
+}
+export function toHours(n, unit, perDay = 6, daysPerWeek = 5) {
+  n = Number(n) || 0;
+  if (unit === 'days') return n * perDay;
+  if (unit === 'weeks') return n * perDay * daysPerWeek;
+  return n;
+}
+export function spanHours(start, end) {
+  if (!start || !end) return 0;
+  const [a, b] = [start, end].map(t => { const [h, m] = t.split(':').map(Number); return h + (m || 0) / 60; });
+  return Math.max(0, Math.round((b - a) * 10) / 10);
+}
+// Future dates a repeating job lands on, for the calendar (fixed: exact; done-based: expected).
+export function jobDatesBetween(job, from, to, cap = 60) {
+  if (!job.nextDue) return [];
+  const out = []; let d = job.nextDue, k = 0;
+  while (d <= to && k++ < cap) { if (d >= from) out.push(d); d = addInterval(d, job.every, job.unit); }
+  return out;
+}
