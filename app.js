@@ -1,9 +1,9 @@
-import * as L from './logic.js?v=1.10';
-import { createStore, DEMO } from './store.js?v=1.10';
-import * as DBX from './dropbox.js?v=1.10';
+import * as L from './logic.js?v=1.11';
+import { createStore, DEMO } from './store.js?v=1.11';
+import * as DBX from './dropbox.js?v=1.11';
 import { DEFAULT_CATEGORIES } from './seed.js';
 
-export const VERSION = '1.10';
+export const VERSION = '1.11';
 const store = createStore();
 const S = { me: null, jobs: [], history: [], projects: [], events: [], cal: null, edProj: null, edEv: null, settings: { categories: DEFAULT_CATEGORIES, defaultTime: '18:00' }, filter: 'all', search: null, loaded: false, sheet: null, pending: null, editing: null };
 const $app = document.getElementById('app');
@@ -44,6 +44,7 @@ const I = {
   plane: sv('<path d="M2 16l20-8-6 12-3-5z"/><path d="M13 15l-3 5"/>'),
   event: sv('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M8 15h3"/>', 2),
   dollar: sv('<path d="M12 3v18M17 7H9.5a2.5 2.5 0 0 0 0 5h5a2.5 2.5 0 0 1 0 5H7"/>', 2),
+  trip: sv('<rect x="3.5" y="7" width="17" height="13" rx="2.5"/><path d="M9 7V5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5v2M3.5 12.5h17M10 12.5v2h4v-2"/>', 2),
   cloud: sv('<path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 8.5a4.75 4.75 0 0 1-.5 9.5H7z"/><path d="M12 11v5M9.5 13.5 12 11l2.5 2.5"/>', 2),
   timer: sv('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/>', 2),
   left: sv('<path d="M15 18l-6-6 6-6"/>', 2.4), right: sv('<path d="M9 6l6 6-6 6"/>', 2.4),
@@ -105,7 +106,7 @@ function ring(pct, size, color, track, label, sub) {
   <text x="50%" y="${sub ? '50%' : '55%'}" text-anchor="middle" font-family="Bricolage Grotesque,sans-serif" font-weight="800" font-size="${size * 0.24}" fill="currentColor">${esc(label)}</text>
   ${sub ? `<text x="50%" y="${size * 0.68}" text-anchor="middle" font-family="DM Sans,sans-serif" font-weight="700" font-size="${size * 0.1}" fill="currentColor" opacity=".8">${esc(sub)}</text>` : ''}</svg>`;
 }
-const NAV = [['home', 'home', 'Home', ['home', 'settings']], ['jobs', 'jobs', 'To Do', ['jobs', 'items', 'history', 'job', 'edit', 'new']], ['projects', 'proj', 'Projects', ['projects', 'project', 'pedit', 'pnew']], ['calendar', 'cal', 'Calendar', ['calendar', 'event']]];
+const NAV = [['home', 'home', 'Home', ['home', 'settings']], ['jobs', 'jobs', 'To Do', ['jobs', 'items', 'history', 'job', 'edit', 'new']], ['projects', 'proj', 'Projects', ['projects', 'project', 'pedit', 'pnew']], ['trips', 'trip', 'Trips', ['trips', 'trip']], ['calendar', 'cal', 'Calendar', ['calendar', 'event']]];
 const nav = () => { const v = route().parts[0] || 'home'; return `<nav class="nav" aria-label="Main">${NAV.map(([r, icon, label, owns]) => `<button class="${owns.includes(v) ? 'on' : ''}" data-act="go" data-to="#/${r}">${I[icon]}${label}</button>`).join('')}</nav>`; };
 const jobsSeg = cur => `<div class="seg" style="margin:0 0 10px" role="tablist">${[['jobs', 'To Do', S.jobs.length], ['items', 'Items', S.jobs.filter(isItem).length], ['history', 'History', '']].map(([k, l, n]) => `<button class="${cur === k ? 'on' : ''}" role="tab" aria-selected="${cur === k}" data-act="go" data-to="#/${k}">${l}${n !== '' ? ' ' + n : ''}</button>`).join('')}</div>`;
 const avatars = () => `<button class="avs" data-act="go" data-to="#/settings" aria-label="Settings" style="border:0;background:none;padding:0">${store.people.map(p => `<span class="av ${p.key}">${esc(p.name[0])}</span>`).join('')}</button>`;
@@ -139,6 +140,7 @@ function viewHome() {
   </div>
   ${overdue.length ? `<div class="lab">Quick wins <button data-act="filter" data-f="overdue">All overdue</button></div>
   <div class="list">${overdue.slice(0, 3).map(j => jobCard(j, t)).join('')}</div>` : ''}
+  ${homeTrip(t)}
   ${homeWeek(t)}
   ${homeProjects(t)}
   ${itemCats.map(c => {
@@ -417,6 +419,80 @@ const time12 = t => { if (!t) return ''; let [h, m] = t.split(':').map(Number); 
 const visibleEvents = () => S.events.filter(e => e.visibility !== 'private' || e.owner === S.me?.key);
 const evTypes = () => S.settings.eventTypes && S.settings.eventTypes.length ? S.settings.eventTypes : ['Holiday', 'Leave', 'Hobby', 'Appointment'];
 const evIcon = e => ({ Holiday: 'plane', Leave: 'plane', Hobby: 'film', Appointment: 'event' }[e.type] || 'event');
+// ---------- trips (v1.11) ----------
+const IDEA_KINDS = [['do', 'Do'], ['eat', 'Eat'], ['stay', 'Stay'], ['day', 'Day trip'], ['other', 'Other']];
+const isTrip = e => e.type === 'Holiday';
+const trips = () => visibleEvents().filter(isTrip);
+const tripEnd = e => e.endDate && e.endDate > e.date ? e.endDate : e.date;
+const tripDays = e => L.daysBetween(e.date, tripEnd(e)) + 1;
+const tripWhen = (e, t) => {
+  if (t < e.date) { const n = L.daysBetween(t, e.date); return n === 1 ? 'Tomorrow!' : `${n} days to go`; }
+  if (t <= tripEnd(e)) return `On now · day ${L.daysBetween(e.date, t) + 1} of ${tripDays(e)}`;
+  return 'Finished';
+};
+const tripDates = (e, t) => tripEnd(e) > e.date ? `${L.shortDate(e.date, t)} – ${L.shortDate(tripEnd(e), t)} · ${tripDays(e)} days` : L.niceDate(e.date, t);
+const ideaCost = e => (e.trip?.ideas || []).reduce((a, x) => a + (Number(x.cost) || 0), 0);
+async function saveTrip(e, patch) { await store.saveDoc('events', e.id, { trip: { ...(e.trip || {}), ...patch } }); }
+
+function tripCard(e, t) {
+  const ideas = e.trip?.ideas || [], live = t >= e.date && t <= tripEnd(e);
+  return `<button class="card" data-act="go" data-to="#/trip/${e.id}" style="flex-direction:column;align-items:stretch;gap:8px">
+    <div style="display:flex;gap:12px;align-items:center"><span class="badge c-slate">${I.trip}</span><div class="ct"><div class="t">${esc(e.title)}${e.visibility === 'private' ? ' <span class="hint">· just me</span>' : ''}</div><div class="s">${esc(e.trip?.where ? e.trip.where + ' · ' : '')}${esc(tripDates(e, t))}</div></div>
+    <span class="pill ${live ? 'p-ok' : t > tripEnd(e) ? '' : 'p-soon'}" style="${t > tripEnd(e) ? 'background:#E3E5EE;color:var(--ink)' : ''}">${esc(tripWhen(e, t))}</span></div>
+    ${ideas.length ? `<div class="hint">${ideas.length} idea${ideas.length > 1 ? 's' : ''}${ideas.some(x => x.done) ? ` · ${ideas.filter(x => x.done).length} done` : ''}${ideaCost(e) ? ' · ' + money(ideaCost(e)) + ' estimated' : ''}</div>` : ''}</button>`;
+}
+
+function viewTrips() {
+  const t = T(), f = S.tfilter || 'up';
+  const all = trips().sort((a, b) => a.date.localeCompare(b.date));
+  const up = all.filter(e => tripEnd(e) >= t), past = all.filter(e => tripEnd(e) < t).reverse();
+  const list = f === 'up' ? up : past;
+  const seg = (k, l, n) => `<button class="${f === k ? 'on' : ''}" data-act="tfilter" data-f="${k}">${l} ${n}</button>`;
+  return `<div class="wrap"><div class="top"><div><div class="sub">Holidays &amp; ideas</div><h1>Trips</h1></div></div>
+  <div class="seg" style="margin-bottom:12px">${seg('up', 'Upcoming', up.length)}${seg('past', 'Past', past.length)}</div>
+  ${list.length ? `<div class="list">${list.map(e => tripCard(e, t)).join('')}</div>` : `<div class="empty">${f === 'up' ? 'No trips planned yet. Tap + to add one. Any Calendar event set as a Holiday shows up here too.' : 'Past trips will show here.'}</div>`}
+  <div class="hint" style="margin:16px 6px 0;text-align:center">Goals and packing lists are coming in the next updates.</div>
+  </div>${nav()}<button class="fab" data-act="go" data-to="#/event/new?type=Holiday" aria-label="Add trip">${I.plus}</button>`;
+}
+
+function viewTrip(id) {
+  const e = findEv(id), t = T();
+  if (!e || !canSee(e)) return `<div class="wrap"><div class="top"><button class="iconbtn" data-act="back" aria-label="Back">${I.back}</button></div><div class="empty">That trip has been deleted.</div></div>${nav()}`;
+  const tr = e.trip || {}, ideas = tr.ideas || [], f = S.ifilter || 'all', me = S.me.key;
+  const shown = ideas.map((x, i) => ({ ...x, i })).filter(x => f === 'all' || x.kind === f);
+  const cost = ideaCost(e), budget = Number(tr.budget) || 0;
+  const thumbs = x => store.people.map(pp => `<button class="thumb ${x.votes?.[pp.key] ? 'on' : ''} ${pp.key === me ? 'mine' : ''}" ${pp.key === me ? `data-act="ivote" data-id="${e.id}" data-i="${x.i}"` : 'disabled'} aria-label="${esc(pp.name)} likes this">👍<small>${esc(pp.name[0])}</small></button>`).join('');
+  const row = x => `<div class="step ${x.done ? 'on' : ''}"><button class="cb ${x.done ? 'on' : ''}" data-act="idone" data-id="${e.id}" data-i="${x.i}" aria-label="Did it">${I.tick}</button>
+    <button class="tasktxt" data-act="iedit" data-id="${e.id}" data-i="${x.i}"><span>${esc(x.text)}</span><small>${esc([IDEA_KINDS.find(k => k[0] === x.kind)?.[1] || 'Other', x.cost ? money(x.cost) : '', x.link ? 'link' : '', x.note ? 'note' : ''].filter(Boolean).join(' · '))}</small></button>
+    <div class="thumbs">${thumbs(x)}</div></div>`;
+  const chip = (k, l) => { const n = k === 'all' ? ideas.length : ideas.filter(x => x.kind === k).length; return `<button class="chip ${f === k ? 'on' : ''}" data-act="ifilter" data-f="${k}">${l}${n ? ' ' + n : ''}</button>`; };
+  return `<div class="wrap">
+  <div class="dhead c-slate" style="color:var(--ink)">
+    <div class="dtop"><button class="iconbtn" data-act="back" aria-label="Back">${I.back}</button><button class="iconbtn" data-act="go" data-to="#/event/${e.id}" aria-label="Edit trip dates">${I.edit}</button></div>
+    <div><div class="sub" style="font-weight:700">${esc(tripDates(e, t))}</div><h1 class="hd" style="margin:2px 0 0;font-size:28px;line-height:1.08">${esc(e.title)}</h1></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="pill" style="background:#fff;color:var(--ink)">${esc(tripWhen(e, t))}</span>${e.visibility === 'private' ? '<span class="pill" style="background:#fff;color:var(--ink)">Just me</span>' : ''}${e.away ? '<span class="pill" style="background:#fff;color:var(--ink)">Reminders paused</span>' : ''}</div>
+  </div>
+  <div class="box" style="margin-top:14px"><label class="row"><span class="rt" style="flex:0 0 auto">Where</span><input class="field" style="flex:1;margin-left:10px" value="${esc(tr.where || '')}" placeholder="e.g. Tokyo &amp; Kyoto" maxlength="60" data-change="twhere" data-id="${e.id}"></label>
+  <label class="row"><span class="rt" style="flex:0 0 auto">Budget</span><input class="field" style="flex:1;margin-left:10px" type="number" min="0" step="1" value="${budget || ''}" placeholder="$" data-change="tbudget" data-id="${e.id}"></label></div>
+  ${budget || cost ? `<div class="minis" style="margin-top:10px"><div class="mini"><b>${budget ? money(budget) : '–'}</b><span>Budget</span></div><div class="mini"><b>${money(cost)}</b><span>Ideas cost</span></div><div class="mini"><b style="color:${budget && cost > budget ? 'var(--late-d)' : 'var(--gum-d)'}">${budget ? money(Math.abs(budget - cost)) : '–'}</b><span>${budget && cost > budget ? 'Over' : 'Left'}</span></div></div>` : ''}
+
+  <div class="lab">Ideas <span>tap 👍 if you're keen</span></div>
+  ${ideas.length ? `<div class="chips">${chip('all', 'All')}${IDEA_KINDS.map(([k, l]) => chip(k, l)).join('')}</div>` : ''}
+  <div class="box">${shown.map(row).join('') || (ideas.length ? '<div class="empty" style="padding:14px">None in this group yet.</div>' : '')}
+  <form class="addstep" data-form="idea" data-id="${e.id}" style="flex-wrap:wrap"><input name="text" placeholder="Add an idea, e.g. Fushimi Inari at sunrise" aria-label="Idea" maxlength="100" style="flex-basis:100%"><select name="kind" class="field" aria-label="Type" style="flex:1;min-height:42px">${IDEA_KINDS.map(([k, l]) => `<option value="${k}" ${k === (f === 'all' ? 'do' : f) ? 'selected' : ''}>${l}</option>`).join('')}</select><input name="cost" type="number" min="0" step="1" placeholder="$" aria-label="Cost" style="flex:0 0 76px"><button class="iconbtn" aria-label="Add idea" style="box-shadow:none;background:var(--soft)">${I.plus}</button></form></div>
+
+  <div class="lab">Notes</div>
+  <div class="box"><textarea class="notes" placeholder="Flights, bookings, things to remember" data-change="tnotes" data-id="${e.id}" aria-label="Trip notes">${esc(tr.notes || '')}</textarea></div>
+  ${e.notes ? `<div class="hint" style="margin:8px 6px">Calendar note: ${esc(e.notes)}</div>` : ''}
+  </div>${nav()}`;
+}
+
+function homeTrip(t) {
+  const nx = trips().filter(e => tripEnd(e) >= t).sort((a, b) => a.date.localeCompare(b.date))[0];
+  if (!nx || L.daysBetween(t, nx.date) > 180) return '';
+  return `<div class="lab">Next trip <button data-act="go" data-to="#/trips">Trips</button></div>${tripCard(nx, t)}`;
+}
+
 // ---------- hobbies (v1.05) ----------
 const HEX = { terra: '#C8553D', slate: '#3D5A6C', wattle: '#E9C46A', gum: '#6B8F47', ochre: '#A0703C', ink: '#1F2544' };
 const DEFAULT_HOBBIES = [{ id: 'video', name: 'Video editing', color: 'slate', icon: 'film' }];
@@ -446,7 +522,7 @@ function calEntries(from, to) {
   for (const e of visibleEvents()) for (const o of L.eventOccurrences(e, from, to)) {
     for (let d = o.date < from ? from : o.date; d <= o.end && d <= to; d = L.addDays(d, 1)) {
       const multi = o.end > o.date;
-      out.push({ date: d, kind: 'event', title: e.title, sub: `${e.type || 'Event'} · ${multi ? L.shortDate(o.date, t) + ' – ' + L.shortDate(o.end, t) : (e.allDay === false && e.start ? time12(e.start) + (e.end ? ' – ' + time12(e.end) : '') : 'All day')}${e.visibility === 'private' ? ' · just me' : ''}${e.away ? ' · away' : ''}`, color: '#3D5A6C', icon: evIcon(e), cls: 'c-slate', go: '#/event/' + e.id, sort: e.allDay === false && e.start ? e.start : '00', away: !!e.away });
+      out.push({ date: d, kind: 'event', title: e.title, sub: `${e.type || 'Event'} · ${multi ? L.shortDate(o.date, t) + ' – ' + L.shortDate(o.end, t) : (e.allDay === false && e.start ? time12(e.start) + (e.end ? ' – ' + time12(e.end) : '') : 'All day')}${e.visibility === 'private' ? ' · just me' : ''}${e.away ? ' · away' : ''}`, color: '#3D5A6C', icon: evIcon(e), cls: 'c-slate', go: (isTrip(e) ? '#/trip/' : '#/event/') + e.id, sort: e.allDay === false && e.start ? e.start : '00', away: !!e.away });
     }
   }
   for (const p of visibleProjects()) {
@@ -654,8 +730,9 @@ function viewEventEdit(id, params) {
   const t = T();
   if (!S.edEv || S.edEv._for !== (id || 'new')) {
     const src = id ? findEv(id) : null;
-    S.edEv = src ? clone(src) : { title: '', type: 'Hobby', date: params.get('date') || t, endDate: '', allDay: true, start: '09:00', end: '12:00', repeat: 'none', until: '', visibility: 'shared', away: false, remind: 'none', notes: '' };
+    S.edEv = src ? clone(src) : { title: '', type: params.get('type') || 'Hobby', date: params.get('date') || t, endDate: '', allDay: true, start: '09:00', end: '12:00', repeat: 'none', until: '', visibility: 'shared', away: false, remind: 'none', notes: '' };
     S.edEv.range = !!S.edEv.endDate && S.edEv.endDate !== S.edEv.date;
+    if (!src && S.edEv.type === 'Holiday') { S.edEv.range = true; S.edEv.away = true; S.edEv.endDate = L.addDays(S.edEv.date, 6); }
     S.edEv._for = id || 'new';
   }
   const e = S.edEv;
@@ -685,6 +762,11 @@ function syncEvForm() {
   const fd = new FormData(f);
   for (const k of ['title', 'date', 'endDate', 'start', 'end', 'repeat', 'until', 'remind', 'notes']) if (fd.has(k)) S.edEv[k] = fd.get(k);
   S.edEv.allDay = fd.has('allDay'); S.edEv.away = fd.has('away');
+}
+function syncIdeaSheet() {
+  if (!S.sheet || S.sheet.type !== 'idea') return;
+  const g = id => document.getElementById(id);
+  if (g('id-t')) { S.sheet.text = g('id-t').value; S.sheet.cost = g('id-c').value; S.sheet.link = g('id-l').value; S.sheet.note = g('id-n').value; }
 }
 function syncTaskSheet() {
   if (!S.sheet || S.sheet.type !== 'task') return;
@@ -719,6 +801,17 @@ function sheetHtml() {
     <div class="grp"><label for="ss-n">Plan (optional)</label><input id="ss-n" class="field" value="${esc(sh.note || '')}" data-change="ssn" maxlength="80" placeholder="e.g. Lay first 10 m²"></div>
     <div class="preview">${h > 0 ? `<b>${esc(L.hoursText(h))}</b> on ${esc(L.niceDate(sh.date, t))}. Shows on the Calendar for both of you.` : 'End time needs to be after the start.'}${free.length ? ` Heads up: ${esc(free.map(k => person(k).name).join(' & '))} marked away that day.` : ''}</div>
     <div class="btns"><button class="btn alt" data-act="closesheet">Cancel</button><button class="btn terra" style="flex:2" data-act="dosession" ${h > 0 ? '' : 'disabled'}>Book it</button></div></div></div>`;
+  }
+  if (sh.type === 'idea') {
+    const e = findEv(sh.id); if (!e) return '';
+    return `<div class="scrim" data-act="closesheet"><div class="sheet" role="dialog" aria-label="Idea" data-stop>
+    <div class="grab"></div><div><h2>Idea</h2><div class="hint" style="margin-top:4px;font-size:13px">${esc(e.title)}</div></div>
+    <div class="grp"><label for="id-t">What</label><input id="id-t" class="field" value="${esc(sh.text)}" maxlength="100"></div>
+    <div class="chips" style="flex-wrap:wrap">${IDEA_KINDS.map(([k, l]) => `<button type="button" class="chip ${sh.kind === k ? 'on' : ''}" data-act="ikind" data-v="${k}">${l}</button>`).join('')}</div>
+    <div class="inline"><div class="grp" style="flex:1"><label for="id-c">Cost (est)</label><input id="id-c" class="field" type="number" min="0" step="1" value="${esc(sh.cost)}" placeholder="$"></div><div class="grp" style="flex:2"><label for="id-l">Link (optional)</label><input id="id-l" class="field" value="${esc(sh.link)}" placeholder="website or map link" autocapitalize="off"></div></div>
+    ${sh.link ? `<a class="hint" href="${esc(/^https?:/i.test(sh.link) ? sh.link : 'https://' + sh.link)}" target="_blank" rel="noopener" style="color:var(--terra-d);font-weight:700">Open link ↗</a>` : ''}
+    <div class="grp"><label for="id-n">Note</label><textarea id="id-n" class="field" style="min-height:70px">${esc(sh.note)}</textarea></div>
+    <div class="btns"><button class="btn alt" data-act="delidea" style="color:var(--late-d)">Delete</button><button class="btn terra" style="flex:2" data-act="doidea">Save</button></div></div></div>`;
   }
   if (sh.type === 'grp') {
     const isCat = sh.g === 'cat', used = isCat ? catUse(sh.id) : S.projects.filter(p => p.hobby === sh.id).length;
@@ -818,6 +911,8 @@ function buildView(v, parts, params) {
   else if (v === 'pedit') html = viewProjectEdit(parts[1], params);
   else if (v === 'pnew') html = viewProjectEdit(null, params);
   else if (v === 'calendar') html = viewCalendar();
+  else if (v === 'trips') html = viewTrips();
+  else if (v === 'trip') html = viewTrip(parts[1]);
   else if (v === 'event') html = viewEventEdit(parts[1] && parts[1] !== 'new' ? parts[1] : null, params);
   else html = viewHome();
   return html;
@@ -992,6 +1087,18 @@ document.addEventListener('click', async ev => {
     case 'evrange': syncEvForm(); S.edEv.range = el.dataset.v === '1'; if (S.edEv.range && (!S.edEv.endDate || S.edEv.endDate < S.edEv.date)) S.edEv.endDate = S.edEv.date; rerender(); break;
     case 'evvis': syncEvForm(); S.edEv.visibility = el.dataset.v; rerender(); break;
     case 'evdelete': if (confirm('Delete this event?')) { await store.deleteDoc('events', id); S.edEv = null; location.replace('#/calendar'); toast('Event deleted', ''); } break;
+    case 'tfilter': S.tfilter = el.dataset.f; rerender(); break;
+    case 'ifilter': S.ifilter = el.dataset.f; rerender(); break;
+    case 'ivote': case 'idone': { const e = findEv(id); if (!e) break; const ideas = clone(e.trip?.ideas || []), x = ideas[+el.dataset.i]; if (!x) break;
+      if (a === 'ivote') { x.votes = { ...(x.votes || {}) }; x.votes[S.me.key] = !x.votes[S.me.key]; } else x.done = !x.done;
+      await saveTrip(e, { ideas }); break; }
+    case 'iedit': { const e = findEv(id), x = e?.trip?.ideas?.[+el.dataset.i]; if (!x) break; S.sheet = { type: 'idea', id, i: +el.dataset.i, text: x.text, kind: x.kind || 'other', cost: x.cost || '', link: x.link || '', note: x.note || '' }; rerender(); break; }
+    case 'ikind': syncIdeaSheet(); S.sheet.kind = el.dataset.v; rerender(); break;
+    case 'doidea': { syncIdeaSheet(); const sh = S.sheet, e = findEv(sh.id); if (!e) break; const text = String(sh.text || '').trim(); if (!text) { toast('An idea needs a name', ''); break; }
+      let link = String(sh.link || '').trim(); if (link && !/^https?:\/\//i.test(link)) link = 'https://' + link;
+      const ideas = clone(e.trip?.ideas || []); ideas[sh.i] = { ...ideas[sh.i], text, kind: sh.kind, cost: Number(sh.cost) || 0, link, note: sh.note || '' };
+      S.sheet = null; await saveTrip(e, { ideas }); rerender(); toast('Idea saved', text); break; }
+    case 'delidea': { const sh = S.sheet, e = findEv(sh.id); if (!e) break; const ideas = clone(e.trip?.ideas || []); ideas.splice(sh.i, 1); S.sheet = null; await saveTrip(e, { ideas }); rerender(); break; }
     case 'dbxagain': try { await DBX.connect(S.settings.dropboxKey || DROPBOX_KEY); rerender(); } catch (e) { toast('Dropbox', e.message); } break;
     case 'dbxcancel': DBX.cancelConnect(); rerender(); break;
     case 'dbxnow': await runBackup(true); break;
@@ -1076,6 +1183,9 @@ document.addEventListener('change', async ev => {
     case 'perday': await store.saveSettings({ hoursPerDay: Math.max(1, Math.min(24, +el.value || 6)) }); toast('Saved', `A project day = ${el.value} hours`); break;
     case 'perweek': await store.saveSettings({ daysPerWeek: Math.max(1, Math.min(7, +el.value || 5)) }); toast('Saved', `A project week = ${el.value} days`); break;
     case 'allday': case 'evrepeat': syncEvForm(); rerender(); break;
+    case 'twhere': { const e = findEv(el.dataset.id); if (e) await saveTrip(e, { where: el.value.trim() }); break; }
+    case 'tbudget': { const e = findEv(el.dataset.id); if (e) await saveTrip(e, { budget: Number(el.value) || 0 }); break; }
+    case 'tnotes': { const e = findEv(el.dataset.id); if (e) await saveTrip(e, { notes: el.value }); break; }
     case 'pongoing': syncProjForm(); if (S.edProj.ongoing && (S.edProj.status === 'planned' || S.edProj.status === 'idea')) S.edProj.status = 'active'; rerender(); break;
     case 'donedate': S.sheet.date = el.value || T(); rerender(); break;
   }
@@ -1111,9 +1221,15 @@ document.addEventListener('submit', async ev => {
       repeat: e.repeat || 'none', until: e.repeat && e.repeat !== 'none' && e.until ? e.until : null, visibility: e.visibility === 'private' ? 'private' : 'shared', owner: e.owner || S.me.key, away: !!e.away, remind: e.remind || 'none', notes: e.notes || '' };
     const id = f.dataset.id;
     if (id) { const old = findEv(id); if (old && (old.date !== data.date || old.start !== data.start || old.remind !== data.remind)) data.notify = null; await store.replaceDoc('events', id, { ...old, ...data, notify: data.notify === null ? null : old?.notify || null }); }
-    else await store.saveDoc('events', null, { ...data, createdBy: S.me.key, createdAt: nowIso() });
-    S.edEv = null; if (S.cal) { S.cal.sel = data.date; S.cal.month = data.date.slice(0, 7); } else S.cal = { month: data.date.slice(0, 7), sel: data.date, view: 'month' };
+    let nid = id;
+    if (!id) nid = await store.saveDoc('events', null, { ...data, createdBy: S.me.key, createdAt: nowIso() });
+    S.edEv = null;
+    if (data.type === 'Holiday') { location.replace('#/trip/' + nid); toast(id ? 'Trip saved' : 'Trip added', `${title} · ${L.niceDate(data.date, T())}`); return; } if (S.cal) { S.cal.sel = data.date; S.cal.month = data.date.slice(0, 7); } else S.cal = { month: data.date.slice(0, 7), sel: data.date, view: 'month' };
     location.replace('#/calendar'); toast(id ? 'Event saved' : 'Event added', `${title} · ${L.niceDate(data.date, T())}`);
+  } else if (f.dataset.form === 'idea') {
+    const e = findEv(f.dataset.id), text = String(fd.get('text') || '').trim(); if (!e || !text) return;
+    await saveTrip(e, { ideas: [...(e.trip?.ideas || []), { text, kind: fd.get('kind') || 'do', cost: Number(fd.get('cost')) || 0, votes: { [S.me.key]: true }, by: S.me.key, done: false }] });
+    setTimeout(() => document.querySelector('[data-form=idea] [name=text]')?.focus(), 50);
   } else if (f.dataset.form === 'dbx') {
     const key = String(fd.get('key') || '').trim();
     if (!key) { toast('Paste the Dropbox App key first', ''); return; }
