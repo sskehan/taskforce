@@ -223,3 +223,6 @@ textarea.field{padding:10px 12px;min-height:80px}
 .months{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
 .months button{border:0;border-radius:10px;min-height:38px;background:var(--soft);font:inherit;font-size:13px;font-weight:700;color:var(--ink)}
 .months button.on{background:var(--ink);color:#fff}
+/* v1.13 packing */
+.step .dot{width:8px;height:8px;border-radius:50%;background:var(--wattle-d, #C9A227);flex:none;margin:0 8px 0 4px}
+.seg button{min-width:0;padding-left:4px;padding-right:4px}

@@ -1,11 +1,11 @@
-import * as L from './logic.js?v=1.12';
-import { createStore, DEMO } from './store.js?v=1.12';
-import * as DBX from './dropbox.js?v=1.12';
+import * as L from './logic.js?v=1.13';
+import { createStore, DEMO } from './store.js?v=1.13';
+import * as DBX from './dropbox.js?v=1.13';
 import { DEFAULT_CATEGORIES } from './seed.js';
 
-export const VERSION = '1.12';
+export const VERSION = '1.13';
 const store = createStore();
-const S = { me: null, jobs: [], history: [], projects: [], events: [], goals: [], cal: null, edProj: null, edEv: null, settings: { categories: DEFAULT_CATEGORIES, defaultTime: '18:00' }, filter: 'all', search: null, loaded: false, sheet: null, pending: null, editing: null };
+const S = { me: null, jobs: [], history: [], projects: [], events: [], goals: [], packs: [], packlists: [], cal: null, edProj: null, edEv: null, settings: { categories: DEFAULT_CATEGORIES, defaultTime: '18:00' }, filter: 'all', search: null, loaded: false, sheet: null, pending: null, editing: null };
 const $app = document.getElementById('app');
 
 // ---------- icons ----------
@@ -107,7 +107,7 @@ function ring(pct, size, color, track, label, sub) {
   <text x="50%" y="${sub ? '50%' : '55%'}" text-anchor="middle" font-family="Bricolage Grotesque,sans-serif" font-weight="800" font-size="${size * 0.24}" fill="currentColor">${esc(label)}</text>
   ${sub ? `<text x="50%" y="${size * 0.68}" text-anchor="middle" font-family="DM Sans,sans-serif" font-weight="700" font-size="${size * 0.1}" fill="currentColor" opacity=".8">${esc(sub)}</text>` : ''}</svg>`;
 }
-const NAV = [['home', 'home', 'Home', ['home', 'settings']], ['jobs', 'jobs', 'To Do', ['jobs', 'items', 'history', 'job', 'edit', 'new']], ['projects', 'proj', 'Projects', ['projects', 'project', 'pedit', 'pnew']], ['trips', 'trip', 'Trips', ['trips', 'trip', 'goal']], ['calendar', 'cal', 'Calendar', ['calendar', 'event']]];
+const NAV = [['home', 'home', 'Home', ['home', 'settings']], ['jobs', 'jobs', 'To Do', ['jobs', 'items', 'history', 'job', 'edit', 'new']], ['projects', 'proj', 'Projects', ['projects', 'project', 'pedit', 'pnew']], ['trips', 'trip', 'Trips', ['trips', 'trip', 'goal', 'pack', 'plist']], ['calendar', 'cal', 'Calendar', ['calendar', 'event']]];
 const nav = () => { const v = route().parts[0] || 'home'; return `<nav class="nav" aria-label="Main">${NAV.map(([r, icon, label, owns]) => `<button class="${owns.includes(v) ? 'on' : ''}" data-act="go" data-to="#/${r}">${I[icon]}${label}</button>`).join('')}</nav>`; };
 const jobsSeg = cur => `<div class="seg" style="margin:0 0 10px" role="tablist">${[['jobs', 'To Do', S.jobs.length], ['items', 'Items', S.jobs.filter(isItem).length], ['history', 'History', '']].map(([k, l, n]) => `<button class="${cur === k ? 'on' : ''}" role="tab" aria-selected="${cur === k}" data-act="go" data-to="#/${k}">${l}${n !== '' ? ' ' + n : ''}</button>`).join('')}</div>`;
 const avatars = () => `<button class="avs" data-act="go" data-to="#/settings" aria-label="Settings" style="border:0;background:none;padding:0">${store.people.map(p => `<span class="av ${p.key}">${esc(p.name[0])}</span>`).join('')}</button>`;
@@ -331,8 +331,8 @@ function viewEdit(id, params) {
 
 // ---------- Dropbox backup (v1.08) ----------
 const DROPBOX_KEY = 'enijr7cppabdid5'; // TaskForce Dropbox app (not secret)
-const backupText = () => JSON.stringify({ app: 'TaskForce', version: VERSION, exported: nowIso(), jobs: S.jobs, history: S.history, projects: S.projects, events: S.events, goals: S.goals, settings: S.settings }, null, 1);
-const dataHash = () => { const x = { ...S.settings }; delete x.dropboxLast; const str = JSON.stringify([S.jobs, S.history, S.projects, S.events, S.goals, x]); let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0; return String(h) + ':' + str.length; };
+const backupText = () => JSON.stringify({ app: 'TaskForce', version: VERSION, exported: nowIso(), jobs: S.jobs, history: S.history, projects: S.projects, events: S.events, goals: S.goals, packs: S.packs, packlists: S.packlists, settings: S.settings }, null, 1);
+const dataHash = () => { const x = { ...S.settings }; delete x.dropboxLast; const str = JSON.stringify([S.jobs, S.history, S.projects, S.events, S.goals, S.packs, S.packlists, x]); let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0; return String(h) + ':' + str.length; };
 let dbxTimer = null, dbxBusy = false;
 async function runBackup(manual) {
   if (dbxBusy || !DBX.status().connected || !S.loaded) return;
@@ -449,14 +449,15 @@ function viewTrips() {
   const up = all.filter(e => tripEnd(e) >= t), past = all.filter(e => tripEnd(e) < t).reverse();
   const list = f === 'up' ? up : past;
   const seg = (k, l, n) => `<button class="${f === k ? 'on' : ''}" data-act="tfilter" data-f="${k}">${l} ${n}</button>`;
+  const segs = `<div class="seg" style="margin-bottom:12px">${seg('up', 'Upcoming', up.length)}${seg('goals', 'Goals', visibleGoals().length)}<button class="${f === 'pack' ? 'on' : ''}" data-act="tfilter" data-f="pack">Packing</button>${seg('past', 'Past', past.length)}</div>`;
+  if (f === 'pack') return `<div class="wrap"><div class="top"><div><div class="sub">Travel essentials</div><h1>Trips</h1></div></div>${segs}${packingBody()}</div>${nav()}`;
   if (f === 'goals') return `<div class="wrap"><div class="top"><div><div class="sub">Where to next?</div><h1>Trips</h1></div></div>
-  <div class="seg" style="margin-bottom:12px">${seg('up', 'Upcoming', up.length)}${seg('goals', 'Goals', visibleGoals().length)}${seg('past', 'Past', past.length)}</div>
+  ${segs}
   ${goalsBody()}
   </div>${nav()}<button class="fab" data-act="newgoal" aria-label="Add goal">${I.plus}</button>`;
   return `<div class="wrap"><div class="top"><div><div class="sub">Holidays &amp; ideas</div><h1>Trips</h1></div></div>
-  <div class="seg" style="margin-bottom:12px">${seg('up', 'Upcoming', up.length)}${seg('goals', 'Goals', visibleGoals().length)}${seg('past', 'Past', past.length)}</div>
+  ${segs}
   ${list.length ? `<div class="list">${list.map(e => tripCard(e, t)).join('')}</div>` : `<div class="empty">${f === 'up' ? 'No trips planned yet. Tap + to add one. Any Calendar event set as a Holiday shows up here too.' : 'Past trips will show here.'}</div>`}
-  <div class="hint" style="margin:16px 6px 0;text-align:center">Packing lists are coming in the next update.</div>
   </div>${nav()}<button class="fab" data-act="go" data-to="#/event/new?type=Holiday" aria-label="Add trip">${I.plus}</button>`;
 }
 
@@ -485,6 +486,7 @@ function viewTrip(id) {
 
   <div class="lab">Notes</div>
   <div class="box"><textarea class="notes" placeholder="Flights, bookings, things to remember" data-change="tnotes" data-id="${e.id}" aria-label="Trip notes">${esc(tr.notes || '')}</textarea></div>
+  ${tripPackSection(e)}
   ${e.notes ? `<div class="hint" style="margin:8px 6px">Calendar note: ${esc(e.notes)}</div>` : ''}
   </div>${nav()}`;
 }
@@ -576,6 +578,88 @@ function viewGoal(id) {
   <div class="lab">Why we want to go</div>
   <div class="box"><textarea class="notes" placeholder="What makes it worthwhile, what we'd love to see" data-change="gfield" data-k="notes" ${dh} aria-label="Notes">${esc(g.notes || '')}</textarea></div>
   <div class="meta"><span>Added by ${esc(person(g.createdBy).name)}</span><button class="chip" data-act="gvis" ${dh}>${g.visibility === 'private' ? 'Share with both' : 'Make just me'}</button></div>
+  </div>${nav()}`;
+}
+
+// ---------- packing lists (v1.13) ----------
+const PACK_CATS = ['Documents', 'Clothes', 'Toiletries', 'Health', 'Tech', 'Fun', 'Other'];
+const PACK_WHO = [
+  { key: 'sl', name: 'Shaun & Lyndsey', packer: 'lyndsey' },
+  { key: 'brooke', name: 'Brooke', packer: 'lyndsey' },
+  { key: 'emma', name: 'Emma', packer: 'emma' },
+  { key: 'alex', name: 'Alex', packer: 'alex' }];
+const PEOPLE_ALL = { shaun: 'Shaun', lyndsey: 'Lyndsey', brooke: 'Brooke', emma: 'Emma', alex: 'Alex' };
+const it = (cat, ...names) => names.map(text => ({ text, cat }));
+const STARTER_PACKS = {
+  sl: [...it('Documents', 'Passports', 'Travel insurance', 'Wallets & cards', 'Bookings & tickets', 'Drivers licences'), ...it('Clothes', 'T-shirts', 'Shorts / pants', 'Underwear', 'Socks', 'Pyjamas', 'Swimmers', 'Jacket', 'Comfortable shoes', 'Hats'),
+    ...it('Toiletries', 'Toothbrushes & toothpaste', 'Deodorant', 'Shampoo & conditioner', 'Hairbrush', 'Razor', 'Sunscreen'), ...it('Health', 'Medications', 'CPAP machine & mask', 'Glasses / contacts', 'First aid basics'),
+    ...it('Tech', 'Phones & chargers', 'Power bank', 'Travel adapter', 'Headphones'), ...it('Other', 'Sunglasses', 'Water bottles', 'Snacks for the trip')],
+  brooke: [...it('Clothes', 'T-shirts', 'Shorts / pants', 'Underwear', 'Socks', 'Pyjamas', 'Swimmers', 'Jumper', 'Shoes', 'Hat'), ...it('Toiletries', 'Toothbrush', 'Hairbrush & hair ties', 'Sunscreen'),
+    ...it('Health', 'Medications'), ...it('Fun', 'Favourite toy', 'Books', 'Tablet & charger', 'Headphones'), ...it('Other', 'Water bottle', 'Snacks')],
+  emma: [...it('Documents', 'Passport / ID', 'Wallet'), ...it('Clothes', 'T-shirts', 'Shorts / pants', 'Underwear', 'Socks', 'Pyjamas', 'Swimmers', 'Jumper', 'Shoes', 'Hat'),
+    ...it('Toiletries', 'Toothbrush', 'Hairbrush & hair ties', 'Deodorant', 'Skincare', 'Sunscreen'), ...it('Tech', 'Phone & charger', 'Headphones'), ...it('Other', 'Sunglasses', 'Water bottle')],
+  alex: [...it('Documents', 'Passport / ID', 'Wallet'), ...it('Clothes', 'T-shirts', 'Shorts / pants', 'Underwear', 'Socks', 'Pyjamas', 'Swimmers', 'Jumper', 'Shoes', 'Cap'),
+    ...it('Toiletries', 'Toothbrush', 'Deodorant', 'Sunscreen'), ...it('Tech', 'Phone & charger', 'Headphones', 'Gaming / Switch'), ...it('Other', 'Sunglasses', 'Water bottle')]
+};
+const findPack = id => S.packs.find(x => x.id === id);
+const findList = id => S.packlists.find(x => x.id === id);
+const listFor = key => S.packlists.find(x => x.listKey === key && (x.kind || 'travel') === 'travel');
+const tripPacks = tid => S.packs.filter(x => x.tripId === tid).sort((a, b) => PACK_WHO.findIndex(w => w.key === a.listKey) - PACK_WHO.findIndex(w => w.key === b.listKey));
+const packDone = x => (x.items || []).filter(i => i.done).length;
+const packerName = k => PEOPLE_ALL[k] || person(k).name;
+
+function packItems(host, kind, id, items, checkable) {
+  const groups = PACK_CATS.map(c => ({ c, list: items.map((x, i) => ({ ...x, i })).filter(x => (PACK_CATS.includes(x.cat) ? x.cat : 'Other') === c) })).filter(g => g.list.length);
+  return groups.map(g => `<div class="lab">${g.c} <span>${checkable ? g.list.filter(x => x.done).length + '/' : ''}${g.list.length}</span></div><div class="box">${g.list.map(x => `<div class="step ${checkable && x.done ? 'on' : ''}">${checkable ? `<button class="cb ${x.done ? 'on' : ''}" data-act="ptick" data-k="${kind}" data-id="${id}" data-i="${x.i}" aria-label="Packed">${I.tick}</button>` : '<span class="dot"></span>'}<span style="flex:1">${esc(x.text)}${x.qty ? ` <span class="hint">× ${esc(x.qty)}</span>` : ''}</span><button class="x" data-act="pitemdel" data-k="${kind}" data-id="${id}" data-i="${x.i}" aria-label="Remove">×</button></div>`).join('')}</div>`).join('')
+    + `<div class="lab">Add item</div><div class="box"><form class="addstep" data-form="pitem" data-k="${kind}" data-id="${id}" style="flex-wrap:wrap"><input name="text" placeholder="e.g. Beach towel" aria-label="Item" maxlength="60" style="flex-basis:100%"><select name="cat" class="field" aria-label="Group" style="flex:1;min-height:42px">${PACK_CATS.map(c => `<option ${c === (S.lastCat || 'Clothes') ? 'selected' : ''}>${c}</option>`).join('')}</select><input name="qty" placeholder="Qty" aria-label="Quantity" maxlength="6" style="flex:0 0 64px"><button class="iconbtn" aria-label="Add item" style="box-shadow:none;background:var(--soft)">${I.plus}</button></form></div>`;
+}
+
+function packingBody() {
+  const t = T();
+  if (!S.packlists.length) return `<div class="empty">No saved packing lists yet.</div><button class="btn terra" data-act="packsetup">Set up our lists</button><div class="hint" style="margin:10px 6px;text-align:center">Creates a starter list each for Shaun &amp; Lyndsey, Brooke, Emma and Alex. Edit them any time.</div>`;
+  const upcoming = trips().filter(e => tripEnd(e) >= t).sort((a, b) => a.date.localeCompare(b.date));
+  const nx = upcoming[0], nxp = nx ? tripPacks(nx.id) : [];
+  return `${nx ? `<div class="lab">Next trip</div>${nxp.length ? `<div class="list">${nxp.map(x => packCard(x)).join('')}</div>` : `<button class="card" data-act="go" data-to="#/trip/${nx.id}"><span class="badge c-slate">${I.trip}</span><div class="ct"><div class="t">${esc(nx.title)}</div><div class="s">No packing lists yet. Tap to add them.</div></div></button>`}` : ''}
+  <div class="lab">Saved lists <span>used for each new trip</span></div>
+  <div class="box">${PACK_WHO.map(w => { const l = listFor(w.key); return l ? `<button class="row" data-act="go" data-to="#/plist/${l.id}"><span class="badge sm c-wattle">${I.trip}</span><div style="flex:1"><div class="rt">${esc(l.name)}</div><div class="rs">${(l.items || []).length} items · packed by ${esc(packerName(l.packer))}</div></div><span class="end">${I.right.replace('<svg', '<svg width="16" height="16"')}</span></button>` : ''; }).join('')}</div>
+  <div class="hint" style="margin:14px 6px;text-align:center">Camping lists (on-grid and off-grid) are coming in a later update.</div>`;
+}
+const packCard = x => { const n = (x.items || []).length, d = packDone(x); return `<button class="card" data-act="go" data-to="#/pack/${x.id}" style="flex-direction:column;align-items:stretch;gap:8px"><div style="display:flex;gap:12px;align-items:center"><span class="badge c-wattle">${I.trip}</span><div class="ct"><div class="t">${esc(x.name)}</div><div class="s">Packed by ${esc(packerName(x.packer))} · ${d}/${n} packed</div></div>${n && d === n ? '<span class="pill p-ok">All packed</span>' : ''}</div><div class="hbar"><span style="width:${n ? Math.round(d / n * 100) : 0}%;background:var(--gum-d)"></span></div></button>`; };
+
+function tripPackSection(e) {
+  const ps = tripPacks(e.id);
+  return `<div class="lab">Packing ${ps.length ? `<span>${ps.reduce((a, x) => a + packDone(x), 0)}/${ps.reduce((a, x) => a + (x.items || []).length, 0)} packed</span>` : ''}</div>
+  ${ps.length ? `<div class="list">${ps.map(packCard).join('')}</div>` : ''}
+  <button class="row" data-act="packadd" data-id="${e.id}" style="color:var(--terra-d);font-weight:700;margin-top:${ps.length ? 8 : 0}px">${ps.length ? '+ Add another person\'s list' : '+ Add packing lists'}</button>`;
+}
+
+function viewPack(id) {
+  const x = findPack(id), t = T();
+  if (!x) return `<div class="wrap"><div class="top"><button class="iconbtn" data-act="back" aria-label="Back">${I.back}</button></div><div class="empty">That packing list has been removed.</div></div>${nav()}`;
+  const e = findEv(x.tripId), trip = e ? { title: e.title, date: e.date, endDate: tripEnd(e), where: e.trip?.where } : { title: x.tripTitle, date: x.tripDate, endDate: x.tripEnd, where: x.where };
+  const n = (x.items || []).length, d = packDone(x);
+  const tr = { date: trip.date, endDate: trip.endDate };
+  return `<div class="wrap">
+  <div class="dhead c-wattle" style="color:var(--ink)">
+    <div class="dtop"><button class="iconbtn" data-act="back" aria-label="Back">${I.back}</button><button class="iconbtn" data-act="packdel" data-id="${x.id}" aria-label="Remove this list">${I.trash}</button></div>
+    <div><div class="sub" style="font-weight:700">${esc(trip.title || 'Trip')}${trip.where ? ' · ' + esc(trip.where) : ''}</div><h1 class="hd" style="margin:2px 0 0;font-size:28px;line-height:1.08">${esc(x.name)}</h1></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${trip.date ? `<span class="pill" style="background:#fff;color:var(--ink)">${esc(tripDates(tr, t))}</span><span class="pill" style="background:#fff;color:var(--ink)">${esc(tripWhen(tr, t))}</span>` : ''}<span class="pill" style="background:#fff;color:var(--ink)">Packed by ${esc(packerName(x.packer))}</span></div>
+  </div>
+  <div class="box" style="margin-top:14px;padding:14px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>${d} of ${n} packed</b>${n && d === n ? '<span class="pill p-ok">All packed 🎉</span>' : ''}</div><div class="hbar"><span style="width:${n ? Math.round(d / n * 100) : 0}%;background:var(--gum-d)"></span></div></div>
+  ${packItems('pack', 'pack', x.id, x.items || [], true)}
+  <div class="btns" style="margin-top:14px"><button class="btn alt" style="box-shadow:none" data-act="packreset" data-id="${x.id}">Untick all</button><button class="btn" data-act="packsave" data-id="${x.id}">Save as my list</button></div>
+  <div class="grp" style="margin-top:12px"><label for="pk-p">Who packs this list</label><select id="pk-p" class="field" data-change="packer" data-k="pack" data-id="${x.id}">${Object.entries(PEOPLE_ALL).map(([k, v]) => `<option value="${k}" ${x.packer === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+  </div>${nav()}`;
+}
+
+function viewPlist(id) {
+  const l = findList(id);
+  if (!l) return `<div class="wrap"><div class="top"><button class="iconbtn" data-act="back" aria-label="Back">${I.back}</button></div><div class="empty">That list has been removed.</div></div>${nav()}`;
+  return `<div class="wrap">
+  <div class="top"><button class="iconbtn" data-act="back" aria-label="Back">${I.back}</button><div style="flex:1;margin-left:12px"><div class="sub">Saved packing list</div><h1 style="font-size:24px">${esc(l.name)}</h1></div></div>
+  <div class="hint" style="margin:0 6px 4px">${(l.items || []).length} items. Each new trip gets a fresh copy of this list.</div>
+  ${packItems('plist', 'plist', l.id, l.items || [], false)}
+  <div class="grp" style="margin-top:12px"><label for="pl-p">Who packs this list</label><select id="pl-p" class="field" data-change="packer" data-k="plist" data-id="${l.id}">${Object.entries(PEOPLE_ALL).map(([k, v]) => `<option value="${k}" ${l.packer === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
   </div>${nav()}`;
 }
 
@@ -890,6 +974,13 @@ function sheetHtml() {
     <div class="preview">${h > 0 ? `<b>${esc(L.hoursText(h))}</b> on ${esc(L.niceDate(sh.date, t))}. Shows on the Calendar for both of you.` : 'End time needs to be after the start.'}${free.length ? ` Heads up: ${esc(free.map(k => person(k).name).join(' & '))} marked away that day.` : ''}</div>
     <div class="btns"><button class="btn alt" data-act="closesheet">Cancel</button><button class="btn terra" style="flex:2" data-act="dosession" ${h > 0 ? '' : 'disabled'}>Book it</button></div></div></div>`;
   }
+  if (sh.type === 'packadd') {
+    const e = findEv(sh.id); if (!e) return ''; const have = new Set(tripPacks(e.id).map(x => x.listKey));
+    return `<div class="scrim" data-act="closesheet"><div class="sheet" role="dialog" aria-label="Add packing lists" data-stop>
+    <div class="grab"></div><div><h2>Who's going?</h2><div class="hint" style="margin-top:4px;font-size:13px">${esc(e.title)} · each person gets a fresh copy of their saved list</div></div>
+    <div class="box">${PACK_WHO.map(w => { const l = listFor(w.key), on = sh.pick.includes(w.key), done = have.has(w.key); return `<button class="row" ${done ? 'disabled style="opacity:.5"' : `data-act="packpick" data-v="${w.key}"`}><span class="cb ${on || done ? 'on' : ''}">${I.tick}</span><div style="flex:1;text-align:left"><div class="rt">${esc(l?.name || w.name)}</div><div class="rs">${done ? 'Already on this trip' : `${(l?.items || STARTER_PACKS[w.key]).length} items · packed by ${esc(packerName(l?.packer || w.packer))}`}</div></div></button>`; }).join('')}</div>
+    <div class="btns"><button class="btn alt" data-act="closesheet">Cancel</button><button class="btn terra" style="flex:2" data-act="dopackadd" ${sh.pick.length ? '' : 'disabled'}>Add ${sh.pick.length || ''} list${sh.pick.length === 1 ? '' : 's'}</button></div></div></div>`;
+  }
   if (sh.type === 'idea') {
     const e = hostObj(sh.h, sh.id); if (!e) return '';
     return `<div class="scrim" data-act="closesheet"><div class="sheet" role="dialog" aria-label="Idea" data-stop>
@@ -1002,6 +1093,8 @@ function buildView(v, parts, params) {
   else if (v === 'trips') html = viewTrips();
   else if (v === 'trip') html = viewTrip(parts[1]);
   else if (v === 'goal') html = viewGoal(parts[1]);
+  else if (v === 'pack') html = viewPack(parts[1]);
+  else if (v === 'plist') html = viewPlist(parts[1]);
   else if (v === 'event') html = viewEventEdit(parts[1] && parts[1] !== 'new' ? parts[1] : null, params);
   else html = viewHome();
   return html;
@@ -1175,7 +1268,7 @@ document.addEventListener('click', async ev => {
       if (!evTypes().includes(n)) await store.saveSettings({ eventTypes: [...evTypes(), n] }); S.edEv.type = n; rerender(); break; }
     case 'evrange': syncEvForm(); S.edEv.range = el.dataset.v === '1'; if (S.edEv.range && (!S.edEv.endDate || S.edEv.endDate < S.edEv.date)) S.edEv.endDate = S.edEv.date; rerender(); break;
     case 'evvis': syncEvForm(); S.edEv.visibility = el.dataset.v; rerender(); break;
-    case 'evdelete': if (confirm('Delete this event?')) { await store.deleteDoc('events', id); S.edEv = null; location.replace('#/calendar'); toast('Event deleted', ''); } break;
+    case 'evdelete': if (confirm('Delete this event?')) { for (const x of S.packs.filter(x => x.tripId === id)) await store.deleteDoc('packs', x.id); await store.deleteDoc('events', id); S.edEv = null; location.replace('#/calendar'); toast('Event deleted', ''); } break;
     case 'newgoal': { const n = (prompt('Where would you love to go? (e.g. Japan)') || '').trim().slice(0, 60); if (!n) break;
       const gid = await store.saveDoc('goals', null, { name: n, status: 'dream', months: [], who: ['shaun', 'lyndsey'], scores: {}, ideas: [], visibility: 'shared', owner: S.me.key, createdBy: S.me.key, createdAt: nowIso() });
       location.hash = '#/goal/' + gid; break; }
@@ -1184,6 +1277,23 @@ document.addEventListener('click', async ev => {
     case 'gwho': { const g = findGoal(id); if (!g) break; const w = new Set(g.who || []); w.has(el.dataset.k) ? w.delete(el.dataset.k) : w.add(el.dataset.k); await store.saveDoc('goals', id, { who: FAMILY.map(f => f[0]).filter(k => w.has(k)) }); break; }
     case 'gvis': { const g = findGoal(id); if (!g) break; await store.saveDoc('goals', id, { visibility: g.visibility === 'private' ? 'shared' : 'private', owner: g.owner || S.me.key }); break; }
     case 'gdelete': if (confirm('Delete this goal and its ideas?')) { await store.deleteDoc('goals', id); location.replace('#/trips'); S.tfilter = 'goals'; toast('Goal deleted', ''); } break;
+    case 'packsetup': { if (S.packlists.length) break; for (const w of PACK_WHO) await store.saveDoc('packlists', null, { listKey: w.key, kind: 'travel', name: w.name, packer: w.packer, items: STARTER_PACKS[w.key] }); toast('Packing lists ready', 'Edit them any time'); break; }
+    case 'packadd': { const e = findEv(id); if (!e) break; if (!S.packlists.length) { for (const w of PACK_WHO) await store.saveDoc('packlists', null, { listKey: w.key, kind: 'travel', name: w.name, packer: w.packer, items: STARTER_PACKS[w.key] }); }
+      const have = new Set(tripPacks(id).map(x => x.listKey)); S.sheet = { type: 'packadd', id, pick: PACK_WHO.filter(w => !have.has(w.key)).map(w => w.key).filter(k => have.size || k === 'sl' || k === 'brooke') }; rerender(); break; }
+    case 'packpick': { const k = el.dataset.v, s2 = new Set(S.sheet.pick); s2.has(k) ? s2.delete(k) : s2.add(k); S.sheet.pick = [...s2]; rerender(); break; }
+    case 'dopackadd': { const sh = S.sheet, e = findEv(sh.id); if (!e || !sh.pick.length) break; S.sheet = null;
+      for (const k of sh.pick) { const w = PACK_WHO.find(x => x.key === k), l = listFor(k);
+        await store.saveDoc('packs', null, { tripId: e.id, tripTitle: e.title, tripDate: e.date, tripEnd: tripEnd(e), where: e.trip?.where || '', listKey: k, name: l?.name || w.name, packer: l?.packer || w.packer, items: clone(l?.items || STARTER_PACKS[k] || []).map(i => ({ ...i, done: false })), createdBy: S.me.key, createdAt: nowIso() }); }
+      rerender(); toast('Packing lists added', sh.pick.length + ' list' + (sh.pick.length > 1 ? 's' : '')); break; }
+    case 'ptick': { const x = findPack(id); if (!x) break; const items = clone(x.items || []); items[+el.dataset.i].done = !items[+el.dataset.i].done; await store.saveDoc('packs', id, { items }); break; }
+    case 'pitemdel': { const col = el.dataset.k === 'pack' ? 'packs' : 'packlists', o = col === 'packs' ? findPack(id) : findList(id); if (!o) break; const items = clone(o.items || []); items.splice(+el.dataset.i, 1); await store.saveDoc(col, id, { items }); break; }
+    case 'packreset': { const x = findPack(id); if (!x || !confirm('Untick everything on this list?')) break; await store.saveDoc('packs', id, { items: (x.items || []).map(i => ({ ...i, done: false })) }); break; }
+    case 'packsave': { const x = findPack(id); if (!x) break; const l = listFor(x.listKey);
+      if (!confirm(`Save these ${(x.items || []).length} items as ${x.name}'s list for future trips?`)) break;
+      const items = (x.items || []).map(({ text, cat, qty }) => ({ text, cat, ...(qty ? { qty } : {}) }));
+      if (l) await store.saveDoc('packlists', l.id, { items, packer: x.packer }); else await store.saveDoc('packlists', null, { listKey: x.listKey, kind: 'travel', name: x.name, packer: x.packer, items });
+      toast('Saved for next time', x.name); break; }
+    case 'packdel': { const x = findPack(id); if (!x || !confirm(`Remove ${x.name}'s list from this trip?`)) break; await store.deleteDoc('packs', id); history.back(); break; }
     case 'tfilter': S.tfilter = el.dataset.f; rerender(); break;
     case 'ifilter': S.ifilter = el.dataset.f; rerender(); break;
     case 'ivote': case 'idone': { const h = el.dataset.h || 'trip', e = hostObj(h, id); if (!e) break; const ideas = clone(hostIdeas(h, e)), x = ideas[+el.dataset.i]; if (!x) break;
@@ -1280,6 +1390,7 @@ document.addEventListener('change', async ev => {
     case 'perday': await store.saveSettings({ hoursPerDay: Math.max(1, Math.min(24, +el.value || 6)) }); toast('Saved', `A project day = ${el.value} hours`); break;
     case 'perweek': await store.saveSettings({ daysPerWeek: Math.max(1, Math.min(7, +el.value || 5)) }); toast('Saved', `A project week = ${el.value} days`); break;
     case 'allday': case 'evrepeat': syncEvForm(); rerender(); break;
+    case 'packer': await store.saveDoc(el.dataset.k === 'pack' ? 'packs' : 'packlists', el.dataset.id, { packer: el.value }); toast('Saved', 'Packed by ' + packerName(el.value)); break;
     case 'gfield': { const k = el.dataset.k, num = ['days', 'cost', 'saved'].includes(k); let v = num ? (el.value === '' ? null : Number(el.value)) : el.value.trim();
       if (k === 'name' && !v) { toast('A goal needs a name', ''); rerender(); break; } await store.saveDoc('goals', el.dataset.id, { [k]: v }); break; }
     case 'twhere': { const e = findEv(el.dataset.id); if (e) await saveTrip(e, { where: el.value.trim() }); break; }
@@ -1321,12 +1432,19 @@ document.addEventListener('submit', async ev => {
     const id = f.dataset.id;
     if (id) { const old = findEv(id); if (old && (old.date !== data.date || old.start !== data.start || old.remind !== data.remind)) data.notify = null; await store.replaceDoc('events', id, { ...old, ...data, notify: data.notify === null ? null : old?.notify || null }); }
     let nid = id;
+    if (id) for (const x of S.packs.filter(x => x.tripId === id)) await store.saveDoc('packs', x.id, { tripTitle: data.title, tripDate: data.date, tripEnd: data.endDate || data.date });
     const fromGoal = !id && e.goal ? findGoal(e.goal) : null;
     if (!id) nid = await store.saveDoc('events', null, { ...data, createdBy: S.me.key, createdAt: nowIso(), ...(fromGoal ? { goal: fromGoal.id, trip: { where: fromGoal.where || '', budget: Number(fromGoal.cost) || 0, ideas: clone(fromGoal.ideas || []), notes: fromGoal.notes || '' } } : {}) });
     if (fromGoal) await store.saveDoc('goals', fromGoal.id, { status: 'booked', tripId: nid });
     S.edEv = null;
     if (data.type === 'Holiday') { location.replace('#/trip/' + nid); toast(id ? 'Trip saved' : 'Trip added', `${title} · ${L.niceDate(data.date, T())}`); return; } if (S.cal) { S.cal.sel = data.date; S.cal.month = data.date.slice(0, 7); } else S.cal = { month: data.date.slice(0, 7), sel: data.date, view: 'month' };
     location.replace('#/calendar'); toast(id ? 'Event saved' : 'Event added', `${title} · ${L.niceDate(data.date, T())}`);
+  } else if (f.dataset.form === 'pitem') {
+    const col = f.dataset.k === 'pack' ? 'packs' : 'packlists', o = col === 'packs' ? findPack(f.dataset.id) : findList(f.dataset.id);
+    const text = String(fd.get('text') || '').trim(); if (!o || !text) return;
+    S.lastCat = fd.get('cat') || 'Other';
+    await store.saveDoc(col, o.id, { items: [...(o.items || []), { text, cat: S.lastCat, ...(String(fd.get('qty') || '').trim() ? { qty: String(fd.get('qty')).trim() } : {}), ...(col === 'packs' ? { done: false } : {}) }] });
+    setTimeout(() => document.querySelector('[data-form=pitem] [name=text]')?.focus(), 50);
   } else if (f.dataset.form === 'idea') {
     const h = f.dataset.h || 'trip', e = hostObj(h, f.dataset.id), text = String(fd.get('text') || '').trim(); if (!e || !text) return;
     await hostSave(h, e, [...hostIdeas(h, e), { text, kind: fd.get('kind') || 'do', cost: Number(fd.get('cost')) || 0, votes: { [S.me.key]: true }, by: S.me.key, done: false }]);
@@ -1394,6 +1512,8 @@ store.start(me => {
   unsubs.push(store.onCol('projects', list => { S.projects = list; if (S.loaded) { rerender(); scheduleBackup(); } }));
   unsubs.push(store.onCol('events', list => { S.events = list; if (S.loaded) { rerender(); scheduleBackup(); } }));
   unsubs.push(store.onCol('goals', list => { S.goals = list; if (S.loaded) { rerender(); scheduleBackup(); } }));
+  unsubs.push(store.onCol('packs', list => { S.packs = list; if (S.loaded) { rerender(); scheduleBackup(); } }));
+  unsubs.push(store.onCol('packlists', list => { S.packlists = list; if (S.loaded) { rerender(); scheduleBackup(); } }));
   unsubs.push(store.onSettings(s => { S.settings = { categories: DEFAULT_CATEGORIES, defaultTime: '18:00', ...s }; if (S.loaded) rerender(); }));
   render();
   // Daily safety net: back up shortly after opening if the last Dropbox backup is over 20 hours old.
