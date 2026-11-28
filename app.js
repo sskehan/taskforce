@@ -1,9 +1,9 @@
-import * as L from './logic.js?v=1.09';
-import { createStore, DEMO } from './store.js?v=1.09';
-import * as DBX from './dropbox.js?v=1.09';
+import * as L from './logic.js?v=1.10';
+import { createStore, DEMO } from './store.js?v=1.10';
+import * as DBX from './dropbox.js?v=1.10';
 import { DEFAULT_CATEGORIES } from './seed.js';
 
-export const VERSION = '1.09';
+export const VERSION = '1.10';
 const store = createStore();
 const S = { me: null, jobs: [], history: [], projects: [], events: [], cal: null, edProj: null, edEv: null, settings: { categories: DEFAULT_CATEGORIES, defaultTime: '18:00' }, filter: 'all', search: null, loaded: false, sheet: null, pending: null, editing: null };
 const $app = document.getElementById('app');

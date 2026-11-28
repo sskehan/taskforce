@@ -200,3 +200,8 @@ textarea.field{padding:10px 12px;min-height:80px}
 .sw svg{width:20px;height:20px}
 .sw i{width:22px;height:22px;border-radius:50%;display:block}
 .sw.on{border-color:var(--ink)}
+/* v1.10: bottom bar docked full width, 4 equal slots (stays centred with large text) */
+.nav{left:0;right:0;bottom:0;transform:none;width:auto;max-width:none;border-radius:20px 20px 0 0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;padding:6px max(8px,calc(50% - 272px)) calc(6px + env(safe-area-inset-bottom));box-shadow:0 -1px 0 var(--line),0 -6px 16px rgba(31,37,68,.07)}
+.nav button,.nav button.on{min-width:0;width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 2px}
+.fab{bottom:calc(var(--nav-h) + 14px + env(safe-area-inset-bottom))}
+.nav button{font-size:10.5px;letter-spacing:-.1px}
