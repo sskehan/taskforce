@@ -213,3 +213,13 @@ textarea.field{padding:10px 12px;min-height:80px}
 .thumb small{font-size:10px;font-weight:800;color:var(--ink)}
 .thumb.on{filter:none;opacity:1;background:var(--wattle-l, #F6EBC6)}
 .thumb[disabled]{cursor:default}
+/* v1.12 goals */
+.worth{display:flex;flex-direction:column;align-items:flex-end;flex:none;line-height:1.1}
+.worth b{font-size:18px;font-family:inherit}
+.worth small{font-size:11px;font-weight:700}
+.stars{display:flex;gap:4px;flex:none}
+.star{width:30px;height:30px;border-radius:50%;border:0;background:var(--soft);color:transparent;font-size:0;padding:0}
+.star.on{background:var(--gum-d)}
+.months{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+.months button{border:0;border-radius:10px;min-height:38px;background:var(--soft);font:inherit;font-size:13px;font-weight:700;color:var(--ink)}
+.months button.on{background:var(--ink);color:#fff}

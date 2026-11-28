@@ -13,7 +13,7 @@ class DemoStore {
   constructor() {
     this.mode = 'demo';
     this.people = [{ key: 'shaun', name: 'Shaun' }, { key: 'lyndsey', name: 'Lyndsey' }];
-    this.subs = { jobs: [], history: [], settings: [], projects: [], events: [] };
+    this.subs = { jobs: [], history: [], settings: [], projects: [], events: [], goals: [] };
     this.load();
   }
   load() {
@@ -26,12 +26,13 @@ class DemoStore {
       this.persist();
     }
   }
-  ensure() { this.db.projects = this.db.projects || {}; this.db.events = this.db.events || {}; }
+  ensure() { this.db.projects = this.db.projects || {}; this.db.events = this.db.events || {}; this.db.goals = this.db.goals || {}; }
   persist() { try { localStorage.setItem('tf-demo', JSON.stringify(this.db)); } catch (e) { console.warn(e); } }
   emit() {
     this.ensure();
     this.subs.projects.forEach(cb => cb(Object.values(this.db.projects)));
     this.subs.events.forEach(cb => cb(Object.values(this.db.events)));
+    this.subs.goals.forEach(cb => cb(Object.values(this.db.goals)));
     const jobs = Object.values(this.db.jobs);
     const hist = Object.values(this.db.history).sort((a, b) => (b.at || '').localeCompare(a.at || ''));
     this.subs.jobs.forEach(cb => cb(jobs));
@@ -61,7 +62,7 @@ class DemoStore {
   }
   async addHistory(e) { const id = uid(); this.db.history[id] = { ...clean(e), id }; this.persist(); this.emit(); return id; }
   async deleteHistory(id) { delete this.db.history[id]; this.persist(); this.emit(); }
-  onCol(col, cb) { this.subs[col].push(cb); setTimeout(() => this.emit()); }
+  onCol(col, cb) { (this.subs[col] = this.subs[col] || []).push(cb); setTimeout(() => this.emit()); }
   async saveDoc(col, id, data) { this.ensure(); id = id || uid(); this.db[col][id] = { ...(this.db[col][id] || {}), ...clean(data), id }; this.persist(); this.emit(); return id; }
   async replaceDoc(col, id, data) { this.ensure(); this.db[col][id] = { ...clean(data), id }; this.persist(); this.emit(); }
   async deleteDoc(col, id) { this.ensure(); delete this.db[col][id]; this.persist(); this.emit(); }
@@ -71,8 +72,8 @@ class DemoStore {
     for (const j of data.jobs || []) { const id = j.id || uid(); this.db.jobs[id] = { ...j, id }; }
     for (const h of data.history || []) { const id = h.id || uid(); this.db.history[id] = { ...h, id }; }
     this.ensure();
-    if (replace) { this.db.projects = {}; this.db.events = {}; }
-    for (const c of ['projects', 'events']) for (const x of data[c] || []) { const id = x.id || uid(); this.db[c][id] = { ...x, id }; }
+    if (replace) { this.db.projects = {}; this.db.events = {}; this.db.goals = {}; }
+    for (const c of ['projects', 'events', 'goals']) for (const x of data[c] || []) { const id = x.id || uid(); this.db[c][id] = { ...x, id }; }
     if (data.settings) this.db.settings = { ...this.db.settings, ...data.settings };
     this.persist(); this.emit();
   }
@@ -159,7 +160,7 @@ class FireStore {
   async importAll(data, replace) {
     const { doc, setDoc, collection, writeBatch, getDocs } = this.fs;
     if (replace) {
-      for (const c of ['jobs', 'history', 'projects', 'events']) {
+      for (const c of ['jobs', 'history', 'projects', 'events', 'goals']) {
         const snap = await getDocs(collection(this.db, c));
         for (let i = 0; i < snap.docs.length; i += 400) {
           const b = writeBatch(this.db); snap.docs.slice(i, i + 400).forEach(d => b.delete(d.ref)); await b.commit();
@@ -177,6 +178,7 @@ class FireStore {
     await put('history', data.history || []);
     await put('projects', data.projects || []);
     await put('events', data.events || []);
+    await put('goals', data.goals || []);
     if (data.settings) await setDoc(doc(this.db, 'settings', 'app'), clean(data.settings), { merge: true });
   }
   async loadStarter() {
